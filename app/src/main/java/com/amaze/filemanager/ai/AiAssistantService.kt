@@ -24,7 +24,6 @@ import android.content.Context
 import com.amaze.filemanager.BuildConfig
 import com.amaze.filemanager.apkeditor.FileType
 import com.google.gson.Gson
-import com.google.gson.JsonObject
 import com.google.gson.annotations.SerializedName
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -38,7 +37,6 @@ import java.util.concurrent.TimeUnit
  * Provides intelligent code analysis, error explanation, and code modification capabilities.
  */
 class AiAssistantService(private val context: Context) {
-
     private val LOG = LoggerFactory.getLogger(AiAssistantService::class.java)
 
     companion object {
@@ -76,11 +74,12 @@ class AiAssistantService(private val context: Context) {
         """
     }
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    private val client =
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build()
 
     private val gson = Gson()
 
@@ -98,7 +97,7 @@ class AiAssistantService(private val context: Context) {
     suspend fun sendMessage(
         message: String,
         context: AiContext,
-        conversationHistory: List<ChatMessage> = emptyList()
+        conversationHistory: List<ChatMessage> = emptyList(),
     ): AiResponse {
         if (!isApiKeyConfigured()) {
             return AiResponse.Error("API key not configured. Please set GEMINI_API_KEY in local.properties")
@@ -108,21 +107,24 @@ class AiAssistantService(private val context: Context) {
             val systemPrompt = getSystemPrompt(context)
             val contents = buildContents(systemPrompt, message, conversationHistory)
 
-            val requestBody = GeminiRequest(
-                contents = contents,
-                generationConfig = GenerationConfig(
-                    maxOutputTokens = MAX_TOKENS,
-                    temperature = 0.7
+            val requestBody =
+                GeminiRequest(
+                    contents = contents,
+                    generationConfig =
+                        GenerationConfig(
+                            maxOutputTokens = MAX_TOKENS,
+                            temperature = 0.7,
+                        ),
                 )
-            )
 
             val jsonBody = gson.toJson(requestBody)
             val url = "${GEMINI_API_BASE_URL}${GEMINI_MODEL}:generateContent?key=${BuildConfig.GEMINI_API_KEY}"
 
-            val request = Request.Builder()
-                .url(url)
-                .post(jsonBody.toRequestBody("application/json".toMediaType()))
-                .build()
+            val request =
+                Request.Builder()
+                    .url(url)
+                    .post(jsonBody.toRequestBody("application/json".toMediaType()))
+                    .build()
 
             val response = client.newCall(request).execute()
 
@@ -148,16 +150,17 @@ class AiAssistantService(private val context: Context) {
     suspend fun explainError(
         code: String,
         error: String? = null,
-        fileType: FileType
+        fileType: FileType,
     ): AiResponse {
-        val prompt = buildString {
-            append("Please explain this ${fileType.name} code segment")
-            if (error != null) {
-                append(" and the following error:\n$error")
+        val prompt =
+            buildString {
+                append("Please explain this ${fileType.name} code segment")
+                if (error != null) {
+                    append(" and the following error:\n$error")
+                }
+                append(":\n\n```\n$code\n```\n\n")
+                append("Provide a clear explanation and identify any potential issues or improvements.")
             }
-            append(":\n\n```\n$code\n```\n\n")
-            append("Provide a clear explanation and identify any potential issues or improvements.")
-        }
 
         return sendMessage(prompt, AiContext.fromFileType(fileType))
     }
@@ -166,17 +169,18 @@ class AiAssistantService(private val context: Context) {
      * Analyze AndroidManifest.xml for security vulnerabilities.
      */
     suspend fun analyzeManifestSecurity(manifestContent: String): AiResponse {
-        val prompt = buildString {
-            append("Perform a comprehensive security analysis of this AndroidManifest.xml:\n\n")
-            append("```xml\n$manifestContent\n```\n\n")
-            append("Analyze for:\n")
-            append("1. Exported components and their risks\n")
-            append("2. Dangerous permission usage\n")
-            append("3. Debuggable and backup settings\n")
-            append("4. Network security configuration\n")
-            append("5. Potential attack vectors\n\n")
-            append("Provide specific recommendations for each finding.")
-        }
+        val prompt =
+            buildString {
+                append("Perform a comprehensive security analysis of this AndroidManifest.xml:\n\n")
+                append("```xml\n$manifestContent\n```\n\n")
+                append("Analyze for:\n")
+                append("1. Exported components and their risks\n")
+                append("2. Dangerous permission usage\n")
+                append("3. Debuggable and backup settings\n")
+                append("4. Network security configuration\n")
+                append("5. Potential attack vectors\n\n")
+                append("Provide specific recommendations for each finding.")
+            }
 
         return sendMessage(prompt, AiContext.SECURITY)
     }
@@ -187,13 +191,14 @@ class AiAssistantService(private val context: Context) {
     suspend fun modifyCode(
         code: String,
         instruction: String,
-        fileType: FileType
+        fileType: FileType,
     ): AiResponse {
-        val prompt = buildString {
-            append("Modify the following ${fileType.name} code according to this instruction: $instruction\n\n")
-            append("Original code:\n```\n$code\n```\n\n")
-            append("Provide the modified code and explain the changes made.")
-        }
+        val prompt =
+            buildString {
+                append("Modify the following ${fileType.name} code according to this instruction: $instruction\n\n")
+                append("Original code:\n```\n$code\n```\n\n")
+                append("Provide the modified code and explain the changes made.")
+            }
 
         return sendMessage(prompt, AiContext.fromFileType(fileType))
     }
@@ -203,17 +208,18 @@ class AiAssistantService(private val context: Context) {
      */
     suspend fun suggestImprovements(
         code: String,
-        fileType: FileType
+        fileType: FileType,
     ): AiResponse {
-        val prompt = buildString {
-            append("Analyze this ${fileType.name} code and suggest improvements:\n\n")
-            append("```\n$code\n```\n\n")
-            append("Focus on:\n")
-            append("1. Performance optimizations\n")
-            append("2. Security improvements\n")
-            append("3. Code quality and best practices\n")
-            append("4. Potential bugs or issues\n")
-        }
+        val prompt =
+            buildString {
+                append("Analyze this ${fileType.name} code and suggest improvements:\n\n")
+                append("```\n$code\n```\n\n")
+                append("Focus on:\n")
+                append("1. Performance optimizations\n")
+                append("2. Security improvements\n")
+                append("3. Code quality and best practices\n")
+                append("4. Potential bugs or issues\n")
+            }
 
         return sendMessage(prompt, AiContext.fromFileType(fileType))
     }
@@ -222,11 +228,12 @@ class AiAssistantService(private val context: Context) {
      * Convert smali to pseudo-Java code.
      */
     suspend fun smaliToJava(smaliCode: String): AiResponse {
-        val prompt = buildString {
-            append("Convert the following smali code to equivalent Java code:\n\n")
-            append("```smali\n$smaliCode\n```\n\n")
-            append("Provide the Java equivalent and explain the conversion.")
-        }
+        val prompt =
+            buildString {
+                append("Convert the following smali code to equivalent Java code:\n\n")
+                append("```smali\n$smaliCode\n```\n\n")
+                append("Provide the Java equivalent and explain the conversion.")
+            }
 
         return sendMessage(prompt, AiContext.SMALI)
     }
@@ -235,15 +242,16 @@ class AiAssistantService(private val context: Context) {
      * Get package name from smali code context.
      */
     suspend fun analyzeSmaliClass(smaliCode: String): AiResponse {
-        val prompt = buildString {
-            append("Analyze this smali class and provide:\n")
-            append("1. Class name and package\n")
-            append("2. Superclass and interfaces\n")
-            append("3. Methods and their signatures\n")
-            append("4. Fields\n")
-            append("5. Purpose of the class\n\n")
-            append("```smali\n$smaliCode\n```")
-        }
+        val prompt =
+            buildString {
+                append("Analyze this smali class and provide:\n")
+                append("1. Class name and package\n")
+                append("2. Superclass and interfaces\n")
+                append("3. Methods and their signatures\n")
+                append("4. Fields\n")
+                append("5. Purpose of the class\n\n")
+                append("```smali\n$smaliCode\n```")
+            }
 
         return sendMessage(prompt, AiContext.SMALI)
     }
@@ -260,33 +268,41 @@ class AiAssistantService(private val context: Context) {
     private fun buildContents(
         systemPrompt: String,
         message: String,
-        history: List<ChatMessage>
+        history: List<ChatMessage>,
     ): List<Content> {
         val contents = mutableListOf<Content>()
 
         // Add system prompt as first user message (Gemini doesn't have system role)
-        contents.add(Content(
-            role = "user",
-            parts = listOf(Part(text = systemPrompt))
-        ))
-        contents.add(Content(
-            role = "model",
-            parts = listOf(Part(text = "I understand and will follow these guidelines."))
-        ))
+        contents.add(
+            Content(
+                role = "user",
+                parts = listOf(Part(text = systemPrompt)),
+            ),
+        )
+        contents.add(
+            Content(
+                role = "model",
+                parts = listOf(Part(text = "I understand and will follow these guidelines.")),
+            ),
+        )
 
         // Add conversation history
         history.forEach { chatMessage ->
-            contents.add(Content(
-                role = if (chatMessage.isUser) "user" else "model",
-                parts = listOf(Part(text = chatMessage.content))
-            ))
+            contents.add(
+                Content(
+                    role = if (chatMessage.isUser) "user" else "model",
+                    parts = listOf(Part(text = chatMessage.content)),
+                ),
+            )
         }
 
         // Add current message
-        contents.add(Content(
-            role = "user",
-            parts = listOf(Part(text = message))
-        ))
+        contents.add(
+            Content(
+                role = "user",
+                parts = listOf(Part(text = message)),
+            ),
+        )
 
         return contents
     }
@@ -316,7 +332,8 @@ enum class AiContext {
     SMALI,
     MANIFEST,
     SECURITY,
-    JAVA;
+    JAVA,
+    ;
 
     companion object {
         fun fromFileType(fileType: FileType): AiContext {
@@ -336,7 +353,7 @@ enum class AiContext {
 data class ChatMessage(
     val content: String,
     val isUser: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
 )
 
 /**
@@ -344,41 +361,42 @@ data class ChatMessage(
  */
 sealed class AiResponse {
     data class Success(val message: String) : AiResponse()
+
     data class Error(val message: String) : AiResponse()
 }
 
 // Data classes for Gemini API request/response
 data class GeminiRequest(
     val contents: List<Content>,
-    val generationConfig: GenerationConfig
+    val generationConfig: GenerationConfig,
 )
 
 data class Content(
     val role: String,
-    val parts: List<Part>
+    val parts: List<Part>,
 )
 
 data class Part(
-    val text: String
+    val text: String,
 )
 
 data class GenerationConfig(
     @SerializedName("maxOutputTokens") val maxOutputTokens: Int,
-    val temperature: Double
+    val temperature: Double,
 )
 
 data class GeminiResponse(
-    val candidates: List<GeminiCandidate>?
+    val candidates: List<GeminiCandidate>?,
 )
 
 data class GeminiCandidate(
-    val content: GeminiContent
+    val content: GeminiContent,
 )
 
 data class GeminiContent(
-    val parts: List<GeminiPart>
+    val parts: List<GeminiPart>,
 )
 
 data class GeminiPart(
-    val text: String
+    val text: String,
 )

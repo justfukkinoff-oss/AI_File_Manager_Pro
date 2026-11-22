@@ -38,34 +38,20 @@ A powerful Android File Manager with advanced APK editing capabilities and integ
 
 ## Building
 
-### Prerequisites
-- Android Studio Hedgehog or later
-- JDK 17
-- Android SDK 35
+Install JDK 17, Python 3, Rust via `rustup`, Android SDK Platform 34, Android Build Tools 34.0.0, and Android NDK r28c (`28.2.13676358`). Set `ANDROID_HOME` to your Android SDK directory and put `cargo` and `rustc` on your `PATH`.
 
-### Setup
+### ARM64 debug APK
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/AI_File_Manager.git
-cd AI_File_Manager
+git clone https://github.com/justfukkinoff-oss/AI_File_Manager_Pro.git
+cd AI_File_Manager_Pro
+bash file_operations/setup_rust_android.sh --arm64
+./gradlew :app:assembleFdroidDebug -Parm64Only=true
 ```
 
-2. Create `local.properties` with your Gemini API key:
-```properties
-GEMINI_API_KEY=your_api_key_here
-```
+The signed debug APK is at `app/build/outputs/apk/fdroid/debug/app-fdroid-debug.apk`. The GitHub Actions Android Build CI workflow also builds it and uploads it as `android-arm64-debug-apk`.
 
-3. Build the project:
-```bash
-./gradlew assembleFdroidDebug
-```
-
-### Getting a Gemini API Key
-
-1. Visit [Google AI Studio](https://aistudio.google.com/)
-2. Create an API key
-3. Add it to your `local.properties` file
+For all four supported ABIs, omit `--arm64` from the Rust setup and omit `-Parm64Only=true` from Gradle. No Gemini API key is needed to build; the default build has AI requests disabled because its API key is empty.
 
 ## Project Structure
 
@@ -89,9 +75,7 @@ app/src/main/java/com/amaze/filemanager/
 ## Dependencies
 
 ### APK Editing
-- **Smali/Baksmali**: For smali code manipulation
-- **Jadx**: DEX to Java decompilation
-- **ApkSigner**: APK signing support
+- **Android apksig**: APK signature creation and verification
 
 ### AI Integration
 - **OkHttp**: HTTP client for Gemini API

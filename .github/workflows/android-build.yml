@@ -6,6 +6,7 @@ on:
       - '*'
       - '!master'
       - '!release/*'
+  workflow_dispatch:
 
 concurrency:
   group: build-${{ github.event.pull_request.number || github.ref }}
@@ -53,36 +54,20 @@ jobs:
 
       - name: Set up Rust for Android
         working-directory: file_operations
-        run: |
-          rustup target add aarch64-linux-android
-          bash ./setup_rust_android.sh
-
-      - name: Restrict native build to ARM64
-        run: |
-          sed -i 's/targets = \["arm", "arm64", "x86", "x86_64"\]/targets = ["arm64"]/' file_operations/build.gradle
-          grep -F 'targets = ["arm64"]' file_operations/build.gradle
-
-      - name: Restrict APK to ARM64
-        run: |
-          cat > arm64.init.gradle <<'EOF'
-          gradle.projectsEvaluated {
-              def app = rootProject.findProject(":app")
-              if (app != null) {
-                  app.android.defaultConfig.ndk.abiFilters.clear()
-                  app.android.defaultConfig.ndk.abiFilters.add("arm64-v8a")
-              }
-          }
-          EOF
+        run: bash ./setup_rust_android.sh --arm64
 
       - name: Assemble ARM64 debug APK
-        run: ./gradlew -I arm64.init.gradle :app:assembleFdroidDebug --stacktrace
+        run: ./gradlew :app:assembleFdroidDebug -Parm64Only=true --stacktrace
 
       - name: Collect APK
         run: |
           set -euo pipefail
           mkdir -p dist
-          apk=$(find app/build/outputs/apk/fdroid/debug -maxdepth 1 -name '*.apk' -print -quit)
-          test -n "$apk"
+          apk=app/build/outputs/apk/fdroid/debug/app-fdroid-debug.apk
+          test -f "$apk"
+          native_abis=$(unzip -Z1 "$apk" | awk -F/ '$1 == "lib" && $3 ~ /\.so$/ {print $2}' | sort -u)
+          test "$native_abis" = arm64-v8a
+          unzip -Z1 "$apk" | grep -Fx 'lib/arm64-v8a/librootoperations.so'
           cp "$apk" "dist/$(basename "$apk" .apk)-arm64-v8a-$(git rev-parse --short HEAD).apk"
           ls -lh dist/
 

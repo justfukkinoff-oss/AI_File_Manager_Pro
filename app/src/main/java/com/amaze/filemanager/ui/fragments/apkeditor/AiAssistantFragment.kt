@@ -21,25 +21,36 @@
 package com.amaze.filemanager.ui.fragments.apkeditor
 
 import android.os.Bundle
-import android.view.*
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.amaze.filemanager.R
-import com.amaze.filemanager.ai.*
+import com.amaze.filemanager.ai.AiAssistantService
+import com.amaze.filemanager.ai.AiContext
+import com.amaze.filemanager.ai.AiResponse
 import com.amaze.filemanager.apkeditor.FileType
-import com.amaze.filemanager.application.AppConfig
 import com.amaze.filemanager.databinding.FragmentAiAssistantBinding
 import com.google.android.material.snackbar.Snackbar
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
+import com.amaze.filemanager.ai.ChatMessage as AiChatMessage
 
 /**
  * AI Assistant Fragment with chat interface for code analysis and modification.
  * Provides persistent memory of current project context.
  */
 class AiAssistantFragment : Fragment() {
-
     private val LOG = LoggerFactory.getLogger(AiAssistantFragment::class.java)
     private var _binding: FragmentAiAssistantBinding? = null
     private val binding get() = _binding!!
@@ -66,7 +77,7 @@ class AiAssistantFragment : Fragment() {
             context: String,
             fileContent: String? = null,
             filePath: String? = null,
-            projectDir: String? = null
+            projectDir: String? = null,
         ): AiAssistantFragment {
             val fragment = AiAssistantFragment()
             val args = Bundle()
@@ -91,13 +102,14 @@ class AiAssistantFragment : Fragment() {
 
             // Determine file type from path
             filePath?.let { path ->
-                fileType = when (path.substringAfterLast(".").lowercase()) {
-                    "smali" -> FileType.SMALI
-                    "xml" -> FileType.XML
-                    "java" -> FileType.JAVA
-                    "json" -> FileType.JSON
-                    else -> FileType.UNKNOWN
-                }
+                fileType =
+                    when (path.substringAfterLast(".").lowercase()) {
+                        "smali" -> FileType.SMALI
+                        "xml" -> FileType.XML
+                        "java" -> FileType.JAVA
+                        "json" -> FileType.JSON
+                        else -> FileType.UNKNOWN
+                    }
             }
         }
 
@@ -107,13 +119,16 @@ class AiAssistantFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         _binding = FragmentAiAssistantBinding.inflate(inflater, container, false)
         return binding.root
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(
+        view: View,
+        savedInstanceState: Bundle?,
+    ) {
         super.onViewCreated(view, savedInstanceState)
 
         setupChat()
@@ -122,21 +137,24 @@ class AiAssistantFragment : Fragment() {
 
         // Add welcome message
         if (conversationHistory.isEmpty()) {
-            addSystemMessage("AI Assistant ready. I can help you with:\n\n" +
+            addSystemMessage(
+                "AI Assistant ready. I can help you with:\n\n" +
                     "• Code analysis and explanation\n" +
                     "• Security vulnerability detection\n" +
                     "• Code modification and optimization\n" +
                     "• Smali to Java conversion\n\n" +
-                    "Select code or use quick actions below to get started.")
+                    "Select code or use quick actions below to get started.",
+            )
         }
     }
 
     private fun setupChat() {
         chatAdapter = ChatAdapter()
         binding.recyclerViewChat.apply {
-            layoutManager = LinearLayoutManager(requireContext()).apply {
-                stackFromEnd = true
-            }
+            layoutManager =
+                LinearLayoutManager(requireContext()).apply {
+                    stackFromEnd = true
+                }
             adapter = chatAdapter
         }
 
@@ -180,20 +198,22 @@ class AiAssistantFragment : Fragment() {
         if (!aiService.isApiKeyConfigured()) {
             binding.inputContainer.visibility = View.GONE
             binding.quickActionsContainer.visibility = View.GONE
-            addSystemMessage("⚠️ API key not configured.\n\n" +
+            addSystemMessage(
+                "⚠️ API key not configured.\n\n" +
                     "To use AI features, add your Gemini API key:\n\n" +
                     "1. Get an API key from Google AI Studio (aistudio.google.com)\n" +
                     "2. Add it to local.properties:\n" +
                     "   GEMINI_API_KEY=your_api_key_here\n" +
-                    "3. Rebuild the app")
+                    "3. Rebuild the app",
+            )
         }
     }
 
     private fun sendMessage() {
-        val message = binding.editTextMessage.text.toString().trim()
+        val message = binding.editTextMessage.text?.toString()?.trim().orEmpty()
         if (message.isEmpty()) return
 
-        binding.editTextMessage.text.clear()
+        binding.editTextMessage.text?.clear()
         addUserMessage(message)
         processUserMessage(message)
     }
@@ -253,7 +273,8 @@ class AiAssistantFragment : Fragment() {
 
         scope.launch {
             val aiContext = AiContext.fromFileType(fileType)
-            val response = aiService.sendMessage(message, aiContext, conversationHistory)
+            val history = conversationHistory.dropLast(1).map { AiChatMessage(it.content, it.isUser, it.timestamp) }
+            val response = aiService.sendMessage(message, aiContext, history)
 
             hideTypingIndicator()
             when (response) {
@@ -305,7 +326,11 @@ class AiAssistantFragment : Fragment() {
     /**
      * Update the current file context.
      */
-    fun updateFileContext(content: String, path: String, type: FileType) {
+    fun updateFileContext(
+        content: String,
+        path: String,
+        type: FileType,
+    ) {
         fileContent = content
         filePath = path
         fileType = type
@@ -322,7 +347,10 @@ class AiAssistantFragment : Fragment() {
         addSystemMessage("Conversation cleared. Ready for new context.")
     }
 
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
+    override fun onCreateOptionsMenu(
+        menu: Menu,
+        inflater: MenuInflater,
+    ) {
         inflater.inflate(R.menu.ai_assistant_menu, menu)
         super.onCreateOptionsMenu(menu, inflater)
     }
@@ -371,8 +399,7 @@ class AiAssistantFragment : Fragment() {
     /**
      * RecyclerView adapter for chat messages.
      */
-    inner class ChatAdapter : androidx.recyclerview.widget.RecyclerView.Adapter<ChatAdapter.MessageViewHolder>() {
-
+    private class ChatAdapter : androidx.recyclerview.widget.RecyclerView.Adapter<ChatAdapter.MessageViewHolder>() {
         private val messages = mutableListOf<ChatMessage>()
 
         fun addMessage(message: ChatMessage) {
@@ -385,19 +412,29 @@ class AiAssistantFragment : Fragment() {
             notifyDataSetChanged()
         }
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): MessageViewHolder {
-            val view = when (viewType) {
-                TYPE_USER -> LayoutInflater.from(parent.context)
-                    .inflate(R.layout.item_chat_message_user, parent, false)
-                TYPE_SYSTEM -> LayoutInflater.from(parent.context)
-                    .inflate(R.layout.item_chat_message_system, parent, false)
-                else -> LayoutInflater.from(parent.context)
-                    .inflate(R.layout.item_chat_message_ai, parent, false)
-            }
+        override fun onCreateViewHolder(
+            parent: ViewGroup,
+            viewType: Int,
+        ): MessageViewHolder {
+            val view =
+                when (viewType) {
+                    TYPE_USER ->
+                        LayoutInflater.from(parent.context)
+                            .inflate(R.layout.item_chat_message_user, parent, false)
+                    TYPE_SYSTEM ->
+                        LayoutInflater.from(parent.context)
+                            .inflate(R.layout.item_chat_message_system, parent, false)
+                    else ->
+                        LayoutInflater.from(parent.context)
+                            .inflate(R.layout.item_chat_message_ai, parent, false)
+                }
             return MessageViewHolder(view)
         }
 
-        override fun onBindViewHolder(holder: MessageViewHolder, position: Int) {
+        override fun onBindViewHolder(
+            holder: MessageViewHolder,
+            position: Int,
+        ) {
             holder.bind(messages[position])
         }
 
@@ -413,8 +450,7 @@ class AiAssistantFragment : Fragment() {
 
         inner class MessageViewHolder(itemView: View) : androidx.recyclerview.widget.RecyclerView.ViewHolder(itemView) {
             fun bind(message: ChatMessage) {
-                // Bind message content to view
-                // Implementation would set TextView text, etc.
+                itemView.findViewById<TextView>(R.id.txtMessage).text = message.content
             }
         }
 
@@ -433,5 +469,5 @@ private data class ChatMessage(
     val content: String,
     val isUser: Boolean,
     val isSystem: Boolean = false,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
 )

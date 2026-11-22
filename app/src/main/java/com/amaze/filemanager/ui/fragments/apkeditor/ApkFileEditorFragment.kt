@@ -20,19 +20,30 @@
 
 package com.amaze.filemanager.ui.fragments.apkeditor
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
-import android.view.*
-import android.widget.Toast
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
+import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
 import com.amaze.filemanager.R
 import com.amaze.filemanager.ai.AiAssistantService
-import com.amaze.filemanager.ai.AiContext
+import com.amaze.filemanager.ai.AiResponse
 import com.amaze.filemanager.apkeditor.FileType
-import com.amaze.filemanager.databinding.FragmentApkFileEditorBinding
 import com.amaze.filemanager.databinding.DialogAiEditBinding
+import com.amaze.filemanager.databinding.FragmentApkFileEditorBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 
 /**
@@ -40,7 +51,6 @@ import org.slf4j.LoggerFactory
  * Supports XML, Smali, and text file editing with AI assistance.
  */
 class ApkFileEditorFragment : Fragment() {
-
     private val LOG = LoggerFactory.getLogger(ApkFileEditorFragment::class.java)
     private var _binding: FragmentApkFileEditorBinding? = null
     private val binding get() = _binding!!
@@ -66,7 +76,7 @@ class ApkFileEditorFragment : Fragment() {
             projectDir: String,
             filePath: String,
             fileType: FileType,
-            content: String
+            content: String,
         ): ApkFileEditorFragment {
             val fragment = ApkFileEditorFragment()
             val args = Bundle()
@@ -96,13 +106,16 @@ class ApkFileEditorFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         _binding = FragmentApkFileEditorBinding.inflate(inflater, container, false)
         return binding.root
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(
+        view: View,
+        savedInstanceState: Bundle?,
+    ) {
         super.onViewCreated(view, savedInstanceState)
 
         setupEditor()
@@ -114,7 +127,7 @@ class ApkFileEditorFragment : Fragment() {
         // Set up the code editor
         binding.editTextContent.setText(originalContent)
 
-        binding.editTextContent.setOnTextChangedListener { text ->
+        binding.editTextContent.doAfterTextChanged { text ->
             hasUnsavedChanges = text.toString() != originalContent
             updateSaveButton()
         }
@@ -217,7 +230,10 @@ class ApkFileEditorFragment : Fragment() {
     }
 
     private fun aiExplainSelection() {
-        val selection = binding.editTextContent.selectedText
+        val editor = binding.editTextContent
+        val start = minOf(editor.selectionStart, editor.selectionEnd)
+        val end = maxOf(editor.selectionStart, editor.selectionEnd)
+        val selection = editor.text?.takeIf { start >= 0 && end <= it.length }?.substring(start, end)
         if (selection.isNullOrEmpty()) {
             Snackbar.make(binding.root, "Please select some text first", Snackbar.LENGTH_SHORT).show()
             return
@@ -230,10 +246,10 @@ class ApkFileEditorFragment : Fragment() {
             hideAiProgress()
 
             when (response) {
-                is AiAssistantService.AiResponse.Success -> {
+                is AiResponse.Success -> {
                     showAiResult("Explanation", response.message)
                 }
-                is AiAssistantService.AiResponse.Error -> {
+                is AiResponse.Error -> {
                     Snackbar.make(binding.root, response.message, Snackbar.LENGTH_LONG).show()
                 }
             }
@@ -267,7 +283,7 @@ class ApkFileEditorFragment : Fragment() {
             hideAiProgress()
 
             when (response) {
-                is AiAssistantService.AiResponse.Success -> {
+                is AiResponse.Success -> {
                     // Extract code from response and apply
                     val modifiedCode = extractCodeFromResponse(response.message)
                     if (modifiedCode != null) {
@@ -277,7 +293,7 @@ class ApkFileEditorFragment : Fragment() {
                         showAiResult("AI Edit Result", response.message)
                     }
                 }
-                is AiAssistantService.AiResponse.Error -> {
+                is AiResponse.Error -> {
                     Snackbar.make(binding.root, response.message, Snackbar.LENGTH_LONG).show()
                 }
             }
@@ -290,22 +306,23 @@ class ApkFileEditorFragment : Fragment() {
         showAiProgress("Analyzing file...")
 
         scope.launch {
-            val response = when {
-                filePath?.contains("AndroidManifest.xml") == true -> {
-                    aiService.analyzeManifestSecurity(content)
+            val response =
+                when {
+                    filePath?.contains("AndroidManifest.xml") == true -> {
+                        aiService.analyzeManifestSecurity(content)
+                    }
+                    else -> {
+                        aiService.suggestImprovements(content, fileType)
+                    }
                 }
-                else -> {
-                    aiService.suggestImprovements(content, fileType)
-                }
-            }
 
             hideAiProgress()
 
             when (response) {
-                is AiAssistantService.AiResponse.Success -> {
+                is AiResponse.Success -> {
                     showAiResult("Analysis Result", response.message)
                 }
-                is AiAssistantService.AiResponse.Error -> {
+                is AiResponse.Error -> {
                     Snackbar.make(binding.root, response.message, Snackbar.LENGTH_LONG).show()
                 }
             }
@@ -322,10 +339,10 @@ class ApkFileEditorFragment : Fragment() {
             hideAiProgress()
 
             when (response) {
-                is AiAssistantService.AiResponse.Success -> {
+                is AiResponse.Success -> {
                     showAiResult("Java Conversion", response.message)
                 }
-                is AiAssistantService.AiResponse.Error -> {
+                is AiResponse.Error -> {
                     Snackbar.make(binding.root, response.message, Snackbar.LENGTH_LONG).show()
                 }
             }
@@ -341,14 +358,17 @@ class ApkFileEditorFragment : Fragment() {
         binding.aiProgressContainer.visibility = View.GONE
     }
 
-    private fun showAiResult(title: String, message: String) {
+    private fun showAiResult(
+        title: String,
+        message: String,
+    ) {
         MaterialAlertDialogBuilder(requireContext())
             .setTitle(title)
             .setMessage(message)
             .setPositiveButton("OK", null)
             .setNeutralButton("Copy") { _, _ ->
                 // Copy to clipboard
-                val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                val clipboard = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = android.content.ClipData.newPlainText(title, message)
                 clipboard.setPrimaryClip(clip)
                 Snackbar.make(binding.root, "Copied to clipboard", Snackbar.LENGTH_SHORT).show()
@@ -367,7 +387,10 @@ class ApkFileEditorFragment : Fragment() {
         onSaveListener = listener
     }
 
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
+    override fun onCreateOptionsMenu(
+        menu: Menu,
+        inflater: MenuInflater,
+    ) {
         inflater.inflate(R.menu.file_editor_menu, menu)
         super.onCreateOptionsMenu(menu, inflater)
     }
@@ -391,12 +414,13 @@ class ApkFileEditorFragment : Fragment() {
     }
 
     private fun openFullAiAssistant() {
-        val aiFragment = AiAssistantFragment.newInstance(
-            context = "File Editor: ${filePath?.substringAfterLast("/")}",
-            fileContent = binding.editTextContent.text.toString(),
-            filePath = filePath,
-            projectDir = projectDir
-        )
+        val aiFragment =
+            AiAssistantFragment.newInstance(
+                context = "File Editor: ${filePath?.substringAfterLast("/")}",
+                fileContent = binding.editTextContent.text.toString(),
+                filePath = filePath,
+                projectDir = projectDir,
+            )
 
         parentFragmentManager.beginTransaction()
             .replace(R.id.content_frame, aiFragment)

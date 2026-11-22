@@ -23,16 +23,13 @@ package com.amaze.filemanager.apkeditor
 import org.slf4j.LoggerFactory
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
-import org.xmlpull.v1.XmlSerializer
 import java.io.StringReader
-import java.io.StringWriter
 
 /**
  * Handles parsing and modification of AndroidManifest.xml files.
  * Provides functionality to modify package name, permissions, components, etc.
  */
 class ManifestEditor {
-
     private val LOG = LoggerFactory.getLogger(ManifestEditor::class.java)
 
     companion object {
@@ -143,14 +140,17 @@ class ManifestEditor {
             services = services,
             receivers = receivers,
             providers = providers,
-            rawXml = xmlContent
+            rawXml = xmlContent,
         )
     }
 
     /**
      * Modify the package name in the manifest.
      */
-    fun modifyPackageName(xmlContent: String, newPackageName: String): String {
+    fun modifyPackageName(
+        xmlContent: String,
+        newPackageName: String,
+    ): String {
         return try {
             // Simple string replacement for package attribute
             // A more robust implementation would parse and rebuild the XML
@@ -165,7 +165,10 @@ class ManifestEditor {
     /**
      * Add a permission to the manifest.
      */
-    fun addPermission(xmlContent: String, permission: String): String {
+    fun addPermission(
+        xmlContent: String,
+        permission: String,
+    ): String {
         return try {
             val permissionTag = """<uses-permission android:name="$permission"/>"""
             // Insert after the manifest tag
@@ -191,7 +194,10 @@ class ManifestEditor {
     /**
      * Remove a permission from the manifest.
      */
-    fun removePermission(xmlContent: String, permission: String): String {
+    fun removePermission(
+        xmlContent: String,
+        permission: String,
+    ): String {
         return try {
             val permissionPattern = """<uses-permission[^>]*android:name\s*=\s*"$permission"[^>]*/>""".toRegex()
             xmlContent.replace(permissionPattern, "")
@@ -204,7 +210,10 @@ class ManifestEditor {
     /**
      * Set the debuggable attribute.
      */
-    fun setDebuggable(xmlContent: String, debuggable: Boolean): String {
+    fun setDebuggable(
+        xmlContent: String,
+        debuggable: Boolean,
+    ): String {
         return try {
             val applicationPattern = """<application[^>]*>""".toRegex()
             val match = applicationPattern.find(xmlContent)
@@ -212,12 +221,13 @@ class ManifestEditor {
                 var applicationTag = match.value
                 val debuggableAttr = """android:debuggable\s*=\s*"[^"]*"""".toRegex()
 
-                applicationTag = if (debuggableAttr.containsMatchIn(applicationTag)) {
-                    applicationTag.replace(debuggableAttr, """android:debuggable="$debuggable"""")
-                } else {
-                    // Add the attribute before the closing >
-                    applicationTag.replace(">", """ android:debuggable="$debuggable">""")
-                }
+                applicationTag =
+                    if (debuggableAttr.containsMatchIn(applicationTag)) {
+                        applicationTag.replace(debuggableAttr, """android:debuggable="$debuggable"""")
+                    } else {
+                        // Add the attribute before the closing >
+                        applicationTag.replace(">", """ android:debuggable="$debuggable">""")
+                    }
 
                 xmlContent.replaceRange(match.range, applicationTag)
             } else {
@@ -232,7 +242,10 @@ class ManifestEditor {
     /**
      * Set the allowBackup attribute.
      */
-    fun setAllowBackup(xmlContent: String, allowBackup: Boolean): String {
+    fun setAllowBackup(
+        xmlContent: String,
+        allowBackup: Boolean,
+    ): String {
         return try {
             val applicationPattern = """<application[^>]*>""".toRegex()
             val match = applicationPattern.find(xmlContent)
@@ -240,11 +253,12 @@ class ManifestEditor {
                 var applicationTag = match.value
                 val backupAttr = """android:allowBackup\s*=\s*"[^"]*"""".toRegex()
 
-                applicationTag = if (backupAttr.containsMatchIn(applicationTag)) {
-                    applicationTag.replace(backupAttr, """android:allowBackup="$allowBackup"""")
-                } else {
-                    applicationTag.replace(">", """ android:allowBackup="$allowBackup">""")
-                }
+                applicationTag =
+                    if (backupAttr.containsMatchIn(applicationTag)) {
+                        applicationTag.replace(backupAttr, """android:allowBackup="$allowBackup"""")
+                    } else {
+                        applicationTag.replace(">", """ android:allowBackup="$allowBackup">""")
+                    }
 
                 xmlContent.replaceRange(match.range, applicationTag)
             } else {
@@ -259,7 +273,10 @@ class ManifestEditor {
     /**
      * Change the version code.
      */
-    fun setVersionCode(xmlContent: String, versionCode: Int): String {
+    fun setVersionCode(
+        xmlContent: String,
+        versionCode: Int,
+    ): String {
         return try {
             val versionCodePattern = """android:versionCode\s*=\s*"[^"]*"""".toRegex()
             if (versionCodePattern.containsMatchIn(xmlContent)) {
@@ -283,7 +300,10 @@ class ManifestEditor {
     /**
      * Change the version name.
      */
-    fun setVersionName(xmlContent: String, versionName: String): String {
+    fun setVersionName(
+        xmlContent: String,
+        versionName: String,
+    ): String {
         return try {
             val versionNamePattern = """android:versionName\s*=\s*"[^"]*"""".toRegex()
             if (versionNamePattern.containsMatchIn(xmlContent)) {
@@ -307,7 +327,10 @@ class ManifestEditor {
     /**
      * Change the target SDK version.
      */
-    fun setTargetSdkVersion(xmlContent: String, targetSdk: Int): String {
+    fun setTargetSdkVersion(
+        xmlContent: String,
+        targetSdk: Int,
+    ): String {
         return try {
             val targetSdkPattern = """android:targetSdkVersion\s*=\s*"[^"]*"""".toRegex()
             if (targetSdkPattern.containsMatchIn(xmlContent)) {
@@ -350,12 +373,13 @@ class ManifestEditor {
                                 val isExported = exported || (hasIntentFilter && parser.getAttributeValue(null, ATTR_EXPORTED) == null)
 
                                 if (isExported) {
-                                    currentComponent = ExportedComponent(
-                                        type = parser.name,
-                                        name = name,
-                                        hasIntentFilter = hasIntentFilter,
-                                        explicitExport = exported
-                                    )
+                                    currentComponent =
+                                        ExportedComponent(
+                                            type = parser.name,
+                                            name = name,
+                                            hasIntentFilter = hasIntentFilter,
+                                            explicitExport = exported,
+                                        )
                                 }
                             }
                         }
@@ -413,72 +437,85 @@ class ManifestEditor {
 
         // Check for debuggable
         if (manifestInfo.rawXml.contains("android:debuggable=\"true\"")) {
-            issues.add(SecurityIssue(
-                severity = Severity.HIGH,
-                title = "Debuggable Application",
-                description = "The application is marked as debuggable, which allows debugging and potential security bypass.",
-                recommendation = "Remove android:debuggable=\"true\" from the manifest for production builds."
-            ))
+            issues.add(
+                SecurityIssue(
+                    severity = Severity.HIGH,
+                    title = "Debuggable Application",
+                    description = "The application is marked as debuggable, which allows debugging and potential security bypass.",
+                    recommendation = "Remove android:debuggable=\"true\" from the manifest for production builds.",
+                ),
+            )
             riskScore += 20
         }
 
         // Check for backup
         if (manifestInfo.rawXml.contains("android:allowBackup=\"true\"")) {
-            issues.add(SecurityIssue(
-                severity = Severity.MEDIUM,
-                title = "Backup Enabled",
-                description = "Application data can be backed up, potentially exposing sensitive data.",
-                recommendation = "Disable allowBackup or use android:fullBackupContent to control backup behavior."
-            ))
+            issues.add(
+                SecurityIssue(
+                    severity = Severity.MEDIUM,
+                    title = "Backup Enabled",
+                    description = "Application data can be backed up, potentially exposing sensitive data.",
+                    recommendation = "Disable allowBackup or use android:fullBackupContent to control backup behavior.",
+                ),
+            )
             riskScore += 10
         }
 
         // Check for cleartext traffic
         if (manifestInfo.rawXml.contains("android:usesCleartextTraffic=\"true\"")) {
-            issues.add(SecurityIssue(
-                severity = Severity.MEDIUM,
-                title = "Cleartext Traffic Allowed",
-                description = "The application may transmit data over unencrypted connections.",
-                recommendation = "Use HTTPS for all network communications."
-            ))
+            issues.add(
+                SecurityIssue(
+                    severity = Severity.MEDIUM,
+                    title = "Cleartext Traffic Allowed",
+                    description = "The application may transmit data over unencrypted connections.",
+                    recommendation = "Use HTTPS for all network communications.",
+                ),
+            )
             riskScore += 15
         }
 
         // Check for dangerous permissions
         val dangerousPermissions = manifestInfo.permissions.filter { isDangerousPermission(it) }
         if (dangerousPermissions.isNotEmpty()) {
-            issues.add(SecurityIssue(
-                severity = Severity.MEDIUM,
-                title = "Dangerous Permissions",
-                description = "Application requests ${dangerousPermissions.size} dangerous permission(s): ${dangerousPermissions.take(3).joinToString()}...",
-                recommendation = "Review if all permissions are necessary for the app's functionality."
-            ))
+            issues.add(
+                SecurityIssue(
+                    severity = Severity.MEDIUM,
+                    title = "Dangerous Permissions",
+                    description =
+                        "Application requests ${dangerousPermissions.size} dangerous permission(s): " +
+                            "${dangerousPermissions.take(3).joinToString()}...",
+                    recommendation = "Review if all permissions are necessary for the app's functionality.",
+                ),
+            )
             riskScore += dangerousPermissions.size * 5
         }
 
         // Check for exported components
         val exportedComponents = findExportedComponents(manifestInfo.rawXml)
         if (exportedComponents.isNotEmpty()) {
-            issues.add(SecurityIssue(
-                severity = Severity.LOW,
-                title = "Exported Components",
-                description = "Found ${exportedComponents.size} exported component(s) that could be accessed by other apps.",
-                recommendation = "Review exported components and add permission restrictions if needed."
-            ))
+            issues.add(
+                SecurityIssue(
+                    severity = Severity.LOW,
+                    title = "Exported Components",
+                    description = "Found ${exportedComponents.size} exported component(s) that could be accessed by other apps.",
+                    recommendation = "Review exported components and add permission restrictions if needed.",
+                ),
+            )
             riskScore += exportedComponents.size * 3
         }
 
-        val riskLevel = when {
-            riskScore >= 50 -> RiskLevel.HIGH
-            riskScore >= 25 -> RiskLevel.MEDIUM
-            else -> RiskLevel.LOW
-        }
+        val riskLevel =
+            when {
+                riskScore >= 50 -> RiskLevel.HIGH
+                riskScore >= 25 -> RiskLevel.MEDIUM
+                else -> RiskLevel.LOW
+            }
 
         return ManifestSecurityReport(
             riskScore = riskScore,
             riskLevel = riskLevel,
             issues = issues,
-            exportedComponents = exportedComponents
+            exportedComponents = exportedComponents,
         )
     }
 
@@ -486,25 +523,26 @@ class ManifestEditor {
      * Check if permission is dangerous.
      */
     private fun isDangerousPermission(permission: String): Boolean {
-        val dangerousPermissions = listOf(
-            "android.permission.READ_CONTACTS",
-            "android.permission.WRITE_CONTACTS",
-            "android.permission.READ_CALENDAR",
-            "android.permission.WRITE_CALENDAR",
-            "android.permission.READ_CALL_LOG",
-            "android.permission.WRITE_CALL_LOG",
-            "android.permission.READ_PHONE_STATE",
-            "android.permission.CALL_PHONE",
-            "android.permission.ACCESS_FINE_LOCATION",
-            "android.permission.ACCESS_COARSE_LOCATION",
-            "android.permission.CAMERA",
-            "android.permission.RECORD_AUDIO",
-            "android.permission.READ_EXTERNAL_STORAGE",
-            "android.permission.WRITE_EXTERNAL_STORAGE",
-            "android.permission.READ_SMS",
-            "android.permission.SEND_SMS",
-            "android.permission.RECEIVE_SMS"
-        )
+        val dangerousPermissions =
+            listOf(
+                "android.permission.READ_CONTACTS",
+                "android.permission.WRITE_CONTACTS",
+                "android.permission.READ_CALENDAR",
+                "android.permission.WRITE_CALENDAR",
+                "android.permission.READ_CALL_LOG",
+                "android.permission.WRITE_CALL_LOG",
+                "android.permission.READ_PHONE_STATE",
+                "android.permission.CALL_PHONE",
+                "android.permission.ACCESS_FINE_LOCATION",
+                "android.permission.ACCESS_COARSE_LOCATION",
+                "android.permission.CAMERA",
+                "android.permission.RECORD_AUDIO",
+                "android.permission.READ_EXTERNAL_STORAGE",
+                "android.permission.WRITE_EXTERNAL_STORAGE",
+                "android.permission.READ_SMS",
+                "android.permission.SEND_SMS",
+                "android.permission.RECEIVE_SMS",
+            )
         return permission in dangerousPermissions
     }
 }
@@ -516,7 +554,7 @@ data class ExportedComponent(
     val type: String,
     val name: String,
     val hasIntentFilter: Boolean,
-    val explicitExport: Boolean
+    val explicitExport: Boolean,
 )
 
 /**
@@ -526,7 +564,7 @@ data class SecurityIssue(
     val severity: Severity,
     val title: String,
     val description: String,
-    val recommendation: String
+    val recommendation: String,
 )
 
 /**
@@ -536,7 +574,7 @@ enum class Severity {
     LOW,
     MEDIUM,
     HIGH,
-    CRITICAL
+    CRITICAL,
 }
 
 /**
@@ -546,5 +584,5 @@ data class ManifestSecurityReport(
     val riskScore: Int,
     val riskLevel: RiskLevel,
     val issues: List<SecurityIssue>,
-    val exportedComponents: List<ExportedComponent>
+    val exportedComponents: List<ExportedComponent>,
 )

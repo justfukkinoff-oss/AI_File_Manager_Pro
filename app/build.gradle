@@ -9,6 +9,7 @@ apply plugin: 'com.google.devtools.ksp'
 android {
     namespace "com.amaze.filemanager"
     compileSdk libs.versions.compileSdk.get().toInteger()
+    ndkVersion libs.versions.ndk.get()
     packagingOptions {
         resources {
             excludes += ['proguard-project.txt', 'project.properties', 'META-INF/LICENSE.txt', 'META-INF/LICENSE', 'META-INF/NOTICE.txt', 'META-INF/NOTICE', 'META-INF/DEPENDENCIES.txt', 'META-INF/DEPENDENCIES', 'META-INF/versions/9/OSGI-INF/MANIFEST.MF']
@@ -22,6 +23,12 @@ android {
         versionCode 124
         versionName "3.11.2"
         multiDexEnabled true
+
+        if (providers.gradleProperty("arm64Only").map { it.toBoolean() }.getOrElse(false)) {
+            ndk {
+                abiFilters "arm64-v8a"
+            }
+        }
 
         vectorDrawables.useSupportLibrary = true
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -263,20 +270,8 @@ dependencies {
     implementation libs.gson
     implementation libs.amaze.trashBin
 
-    // APK Editor dependencies
-    // Smali/Baksmali for smali file editing
-    implementation libs.smali
-    implementation libs.baksmali
-
-    // Jadx for DEX to Java decompilation
-    implementation libs.jadx.core
-    implementation libs.jadx.dex.input
-
-    // Android APK Signer
-    implementation libs.apksigner
-
-    // Xml pull parser for manifest editing
-    implementation libs.kxml2
+    implementation libs.apksig
+    implementation libs.kotlin.coroutine.android
 }
 
 kotlin {

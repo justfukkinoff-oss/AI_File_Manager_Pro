@@ -20,27 +20,33 @@
 
 package com.amaze.filemanager.ui.fragments.apkeditor
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.view.*
-import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
+import android.view.LayoutInflater
+import android.view.Menu
+import android.view.MenuInflater
+import android.view.MenuItem
+import android.view.View
+import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.amaze.filemanager.R
-import com.amaze.filemanager.apkeditor.*
-import com.amaze.filemanager.application.AppConfig
-import com.amaze.filemanager.databinding.FragmentApkViewerBinding
+import com.amaze.filemanager.apkeditor.ApkEditorEngine
+import com.amaze.filemanager.apkeditor.ApkInfo
+import com.amaze.filemanager.apkeditor.ApkOperationResult
+import com.amaze.filemanager.apkeditor.FileType
+import com.amaze.filemanager.apkeditor.ManifestEditor
+import com.amaze.filemanager.apkeditor.ProjectFile
 import com.amaze.filemanager.databinding.DialogApkInfoBinding
+import com.amaze.filemanager.databinding.FragmentApkViewerBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.core.Single
-import io.reactivex.rxjava3.disposables.CompositeDisposable
-import io.reactivex.rxjava3.schedulers.Schedulers
+import io.reactivex.Single
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.schedulers.Schedulers
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -49,7 +55,6 @@ import java.io.File
  * Provides functionality similar to MT Manager for APK manipulation.
  */
 class ApkViewerFragment : Fragment() {
-
     private val LOG = LoggerFactory.getLogger(ApkViewerFragment::class.java)
     private var _binding: FragmentApkViewerBinding? = null
     private val binding get() = _binding!!
@@ -87,13 +92,16 @@ class ApkViewerFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         _binding = FragmentApkViewerBinding.inflate(inflater, container, false)
         return binding.root
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+    override fun onViewCreated(
+        view: View,
+        savedInstanceState: Bundle?,
+    ) {
         super.onViewCreated(view, savedInstanceState)
 
         setupRecyclerView()
@@ -102,9 +110,10 @@ class ApkViewerFragment : Fragment() {
     }
 
     private fun setupRecyclerView() {
-        fileAdapter = ApkFileAdapter { file ->
-            onFileClicked(file)
-        }
+        fileAdapter =
+            ApkFileAdapter { file ->
+                onFileClicked(file)
+            }
 
         binding.recyclerViewFiles.apply {
             layoutManager = LinearLayoutManager(requireContext())
@@ -155,7 +164,7 @@ class ApkViewerFragment : Fragment() {
                         LOG.error("Failed to load APK info", error)
                         binding.progressBar.visibility = View.GONE
                         binding.txtStatus.text = "Failed to load APK: ${error.message}"
-                    })
+                    }),
             )
         }
     }
@@ -168,25 +177,33 @@ class ApkViewerFragment : Fragment() {
         val cacheDir = File(requireContext().cacheDir, "apk_projects")
         if (!cacheDir.exists()) cacheDir.mkdirs()
 
-        projectDir = File(cacheDir, File(apkPath).nameWithoutExtension).apply {
-            if (exists()) deleteRecursively()
-            mkdirs()
-        }.absolutePath
+        projectDir =
+            File(cacheDir, File(apkPath).nameWithoutExtension).apply {
+                if (exists()) deleteRecursively()
+                mkdirs()
+            }.absolutePath
 
         disposables.add(
             Single.fromCallable {
-                apkEditorEngine.extractApk(apkPath, projectDir!!, object : ApkEditorEngine.ProgressCallback {
-                    override fun onProgressUpdate(progress: Int, message: String) {
-                        activity?.runOnUiThread {
-                            binding.progressBar.progress = progress
-                            binding.txtStatus.text = message
+                apkEditorEngine.extractApk(
+                    apkPath,
+                    projectDir!!,
+                    object : ApkEditorEngine.ProgressCallback {
+                        override fun onProgressUpdate(
+                            progress: Int,
+                            message: String,
+                        ) {
+                            activity?.runOnUiThread {
+                                binding.progressBar.progress = progress
+                                binding.txtStatus.text = message
+                            }
                         }
-                    }
 
-                    override fun onComplete(result: ApkOperationResult) {
-                        // Result is returned via the return value
-                    }
-                })
+                        override fun onComplete(result: ApkOperationResult) {
+                            // Result is returned via the return value
+                        }
+                    },
+                )
             }
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
@@ -206,7 +223,7 @@ class ApkViewerFragment : Fragment() {
                     LOG.error("Failed to extract APK", error)
                     binding.progressBar.visibility = View.GONE
                     binding.txtStatus.text = "Extraction failed: ${error.message}"
-                })
+                }),
         )
     }
 
@@ -238,12 +255,13 @@ class ApkViewerFragment : Fragment() {
         projectDir?.let { dir ->
             val content = apkEditorEngine.readFile(dir, file.path)
             content?.let {
-                val editorFragment = ApkFileEditorFragment.newInstance(
-                    projectDir = dir,
-                    filePath = file.path,
-                    fileType = file.type,
-                    content = it
-                )
+                val editorFragment =
+                    ApkFileEditorFragment.newInstance(
+                        projectDir = dir,
+                        filePath = file.path,
+                        fileType = file.type,
+                        content = it,
+                    )
                 editorFragment.setOnSaveListener { savedContent ->
                     apkEditorEngine.writeFile(dir, file.path, savedContent)
                 }
@@ -258,12 +276,13 @@ class ApkViewerFragment : Fragment() {
 
     private fun showFileInfo(file: ProjectFile) {
         val sizeStr = formatFileSize(file.size)
-        val message = """
+        val message =
+            """
             Name: ${file.name}
             Path: ${file.path}
             Type: ${file.type}
             Size: $sizeStr
-        """.trimIndent()
+            """.trimIndent()
 
         MaterialAlertDialogBuilder(requireContext())
             .setTitle("File Info")
@@ -279,24 +298,27 @@ class ApkViewerFragment : Fragment() {
             binding.txtPackageName.text = info.packageName
             binding.txtVersion.text = "${info.versionName} (${info.versionCode})"
             binding.txtSdk.text = "Min: ${info.minSdkVersion}, Target: ${info.targetSdkVersion}"
-            binding.txtPermissions.text = if (info.permissions.isNotEmpty()) {
-                info.permissions.take(10).joinToString("\n") { "• $it" } +
+            binding.txtPermissions.text =
+                if (info.permissions.isNotEmpty()) {
+                    info.permissions.take(10).joinToString("\n") { "• $it" } +
                         if (info.permissions.size > 10) "\n... and ${info.permissions.size - 10} more" else ""
-            } else {
-                "No permissions"
-            }
-            binding.txtComponents.text = """
+                } else {
+                    "No permissions"
+                }
+            binding.txtComponents.text =
+                """
                 Activities: ${info.activities.size}
                 Services: ${info.services.size}
                 Receivers: ${info.receivers.size}
                 Providers: ${info.providers.size}
-            """.trimIndent()
+                """.trimIndent()
 
-            val dialog = MaterialAlertDialogBuilder(requireContext())
-                .setTitle(info.applicationLabel)
-                .setView(binding.root)
-                .setPositiveButton("OK", null)
-                .create()
+            val dialog =
+                MaterialAlertDialogBuilder(requireContext())
+                    .setTitle(info.applicationLabel)
+                    .setView(binding.root)
+                    .setPositiveButton("OK", null)
+                    .create()
 
             dialog.show()
         }
@@ -321,22 +343,23 @@ class ApkViewerFragment : Fragment() {
                         binding.progressBar.visibility = View.GONE
 
                         report?.let { securityReport ->
-                            val message = buildString {
-                                append("Risk Level: ${securityReport.riskLevel}\n")
-                                append("Risk Score: ${securityReport.riskScore}\n\n")
-                                append("Issues Found:\n")
-                                securityReport.issues.forEach { issue ->
-                                    append("\n[${issue.severity}] ${issue.title}\n")
-                                    append("${issue.description}\n")
-                                }
+                            val message =
+                                buildString {
+                                    append("Risk Level: ${securityReport.riskLevel}\n")
+                                    append("Risk Score: ${securityReport.riskScore}\n\n")
+                                    append("Issues Found:\n")
+                                    securityReport.issues.forEach { issue ->
+                                        append("\n[${issue.severity}] ${issue.title}\n")
+                                        append("${issue.description}\n")
+                                    }
 
-                                if (securityReport.exportedComponents.isNotEmpty()) {
-                                    append("\n\nExported Components:\n")
-                                    securityReport.exportedComponents.take(5).forEach {
-                                        append("• ${it.type}: ${it.name}\n")
+                                    if (securityReport.exportedComponents.isNotEmpty()) {
+                                        append("\n\nExported Components:\n")
+                                        securityReport.exportedComponents.take(5).forEach {
+                                            append("• ${it.type}: ${it.name}\n")
+                                        }
                                     }
                                 }
-                            }
 
                             MaterialAlertDialogBuilder(requireContext())
                                 .setTitle("Security Analysis")
@@ -348,7 +371,7 @@ class ApkViewerFragment : Fragment() {
                         LOG.error("Security analysis failed", error)
                         binding.progressBar.visibility = View.GONE
                         binding.txtStatus.text = "Analysis failed: ${error.message}"
-                    })
+                    }),
             )
         }
     }
@@ -358,12 +381,13 @@ class ApkViewerFragment : Fragment() {
             val manifestFile = File(dir, ApkEditorEngine.ANDROID_MANIFEST)
             if (manifestFile.exists()) {
                 val content = manifestFile.readText()
-                val editorFragment = ApkFileEditorFragment.newInstance(
-                    projectDir = dir,
-                    filePath = ApkEditorEngine.ANDROID_MANIFEST,
-                    fileType = FileType.XML,
-                    content = content
-                )
+                val editorFragment =
+                    ApkFileEditorFragment.newInstance(
+                        projectDir = dir,
+                        filePath = ApkEditorEngine.ANDROID_MANIFEST,
+                        fileType = FileType.XML,
+                        content = content,
+                    )
                 editorFragment.setOnSaveListener { savedContent ->
                     manifestFile.writeText(savedContent)
                     Snackbar.make(binding.root, "Manifest saved", Snackbar.LENGTH_SHORT).show()
@@ -395,26 +419,34 @@ class ApkViewerFragment : Fragment() {
 
     private fun saveUnsignedApk() {
         projectDir?.let { dir ->
-            val outputPath = File(
-                requireContext().getExternalFilesDir(null),
-                "${File(apkPath ?: "app").nameWithoutExtension}_modified.apk"
-            ).absolutePath
+            val outputPath =
+                File(
+                    requireContext().getExternalFilesDir(null),
+                    "${File(apkPath ?: "app").nameWithoutExtension}_modified.apk",
+                ).absolutePath
 
             binding.progressBar.visibility = View.VISIBLE
             binding.txtStatus.text = "Building APK..."
 
             disposables.add(
                 Single.fromCallable {
-                    apkEditorEngine.repackageApk(dir, outputPath, object : ApkEditorEngine.ProgressCallback {
-                        override fun onProgressUpdate(progress: Int, message: String) {
-                            activity?.runOnUiThread {
-                                binding.progressBar.progress = progress
-                                binding.txtStatus.text = message
+                    apkEditorEngine.repackageApk(
+                        dir,
+                        outputPath,
+                        object : ApkEditorEngine.ProgressCallback {
+                            override fun onProgressUpdate(
+                                progress: Int,
+                                message: String,
+                            ) {
+                                activity?.runOnUiThread {
+                                    binding.progressBar.progress = progress
+                                    binding.txtStatus.text = message
+                                }
                             }
-                        }
 
-                        override fun onComplete(result: ApkOperationResult) {}
-                    })
+                            override fun onComplete(result: ApkOperationResult) {}
+                        },
+                    )
                 }
                     .subscribeOn(Schedulers.io())
                     .observeOn(AndroidSchedulers.mainThread())
@@ -437,33 +469,41 @@ class ApkViewerFragment : Fragment() {
                         LOG.error("Failed to save APK", error)
                         binding.progressBar.visibility = View.GONE
                         Snackbar.make(binding.root, "Error: ${error.message}", Snackbar.LENGTH_LONG).show()
-                    })
+                    }),
             )
         }
     }
 
     private fun saveSignedApk() {
         projectDir?.let { dir ->
-            val outputPath = File(
-                requireContext().getExternalFilesDir(null),
-                "${File(apkPath ?: "app").nameWithoutExtension}_signed.apk"
-            ).absolutePath
+            val outputPath =
+                File(
+                    requireContext().getExternalFilesDir(null),
+                    "${File(apkPath ?: "app").nameWithoutExtension}_signed.apk",
+                ).absolutePath
 
             binding.progressBar.visibility = View.VISIBLE
             binding.txtStatus.text = "Building and signing APK..."
 
             disposables.add(
                 Single.fromCallable {
-                    apkEditorEngine.repackageApk(dir, outputPath, object : ApkEditorEngine.ProgressCallback {
-                        override fun onProgressUpdate(progress: Int, message: String) {
-                            activity?.runOnUiThread {
-                                binding.progressBar.progress = progress
-                                binding.txtStatus.text = message
+                    apkEditorEngine.repackageApk(
+                        dir,
+                        outputPath,
+                        object : ApkEditorEngine.ProgressCallback {
+                            override fun onProgressUpdate(
+                                progress: Int,
+                                message: String,
+                            ) {
+                                activity?.runOnUiThread {
+                                    binding.progressBar.progress = progress
+                                    binding.txtStatus.text = message
+                                }
                             }
-                        }
 
-                        override fun onComplete(result: ApkOperationResult) {}
-                    })
+                            override fun onComplete(result: ApkOperationResult) {}
+                        },
+                    )
                 }
                     .subscribeOn(Schedulers.io())
                     .observeOn(AndroidSchedulers.mainThread())
@@ -475,7 +515,10 @@ class ApkViewerFragment : Fragment() {
                                     .setAction("Install") {
                                         // Install APK
                                         val intent = Intent(Intent.ACTION_VIEW)
-                                        intent.setDataAndType(Uri.fromFile(File(result.outputPath!!)), "application/vnd.android.package-archive")
+                                        intent.setDataAndType(
+                                            Uri.fromFile(File(result.outputPath!!)),
+                                            "application/vnd.android.package-archive",
+                                        )
                                         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                         startActivity(intent)
                                     }
@@ -490,7 +533,7 @@ class ApkViewerFragment : Fragment() {
                         LOG.error("Failed to save signed APK", error)
                         binding.progressBar.visibility = View.GONE
                         Snackbar.make(binding.root, "Error: ${error.message}", Snackbar.LENGTH_LONG).show()
-                    })
+                    }),
             )
         }
     }
@@ -502,11 +545,12 @@ class ApkViewerFragment : Fragment() {
 
             if (manifestContent != null) {
                 // Trigger AI analysis
-                val aiFragment = AiAssistantFragment.newInstance(
-                    context = "APK Analysis",
-                    fileContent = manifestContent,
-                    filePath = ApkEditorEngine.ANDROID_MANIFEST
-                )
+                val aiFragment =
+                    AiAssistantFragment.newInstance(
+                        context = "APK Analysis",
+                        fileContent = manifestContent,
+                        filePath = ApkEditorEngine.ANDROID_MANIFEST,
+                    )
 
                 parentFragmentManager.beginTransaction()
                     .replace(R.id.content_frame, aiFragment)
@@ -525,7 +569,10 @@ class ApkViewerFragment : Fragment() {
         }
     }
 
-    override fun onCreateOptionsMenu(menu: Menu, inflater: MenuInflater) {
+    override fun onCreateOptionsMenu(
+        menu: Menu,
+        inflater: MenuInflater,
+    ) {
         inflater.inflate(R.menu.apk_viewer_menu, menu)
         super.onCreateOptionsMenu(menu, inflater)
     }
@@ -558,25 +605,34 @@ class ApkViewerFragment : Fragment() {
      * Adapter for displaying APK project files.
      */
     inner class ApkFileAdapter(
-        private val onFileClick: (ProjectFile) -> Unit
+        private val onFileClick: (ProjectFile) -> Unit,
     ) : RecyclerView.Adapter<ApkFileAdapter.FileViewHolder>() {
-
         private var files = listOf<ProjectFile>()
         private var currentPath = ""
 
-        fun updateFiles(newFiles: List<ProjectFile>, path: String) {
+        fun updateFiles(
+            newFiles: List<ProjectFile>,
+            path: String,
+        ) {
             files = newFiles
             currentPath = path
             notifyDataSetChanged()
         }
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): FileViewHolder {
-            val view = LayoutInflater.from(parent.context)
-                .inflate(R.layout.item_apk_file, parent, false)
+        override fun onCreateViewHolder(
+            parent: ViewGroup,
+            viewType: Int,
+        ): FileViewHolder {
+            val view =
+                LayoutInflater.from(parent.context)
+                    .inflate(R.layout.item_apk_file, parent, false)
             return FileViewHolder(view)
         }
 
-        override fun onBindViewHolder(holder: FileViewHolder, position: Int) {
+        override fun onBindViewHolder(
+            holder: FileViewHolder,
+            position: Int,
+        ) {
             holder.bind(files[position])
         }
 

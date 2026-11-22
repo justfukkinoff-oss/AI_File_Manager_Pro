@@ -28,7 +28,6 @@ import java.io.File
  * Provides functionality to analyze and modify Dalvik bytecode in smali format.
  */
 class SmaliEditor {
-
     private val LOG = LoggerFactory.getLogger(SmaliEditor::class.java)
 
     companion object {
@@ -107,7 +106,7 @@ class SmaliEditor {
             methods = methods,
             fields = fields,
             annotations = annotations,
-            content = content
+            content = content,
         )
     }
 
@@ -178,17 +177,20 @@ class SmaliEditor {
             stringPattern.findAll(line).forEach { match ->
                 val stringValue = match.groupValues[1]
                 // Unescape common escape sequences
-                val unescaped = stringValue
-                    .replace("\\n", "\n")
-                    .replace("\\t", "\t")
-                    .replace("\\\"", "\"")
-                    .replace("\\\\", "\\")
+                val unescaped =
+                    stringValue
+                        .replace("\\n", "\n")
+                        .replace("\\t", "\t")
+                        .replace("\\\"", "\"")
+                        .replace("\\\\", "\\")
 
-                literals.add(StringLiteral(
-                    value = unescaped,
-                    lineNumber = index + 1,
-                    rawLine = line.trim()
-                ))
+                literals.add(
+                    StringLiteral(
+                        value = unescaped,
+                        lineNumber = index + 1,
+                        rawLine = line.trim(),
+                    ),
+                )
             }
         }
 
@@ -200,17 +202,18 @@ class SmaliEditor {
      */
     fun findMethodInvocations(content: String): List<MethodInvocation> {
         val invocations = mutableListOf<MethodInvocation>()
-        val invokePatterns = listOf(
-            "invoke-virtual",
-            "invoke-static",
-            "invoke-direct",
-            "invoke-interface",
-            "invoke-super",
-            "invoke-virtual/range",
-            "invoke-static/range",
-            "invoke-direct/range",
-            "invoke-interface/range"
-        )
+        val invokePatterns =
+            listOf(
+                "invoke-virtual",
+                "invoke-static",
+                "invoke-direct",
+                "invoke-interface",
+                "invoke-super",
+                "invoke-virtual/range",
+                "invoke-static/range",
+                "invoke-direct/range",
+                "invoke-interface/range",
+            )
 
         content.lines().forEachIndexed { index, line ->
             val trimmedLine = line.trim()
@@ -223,13 +226,15 @@ class SmaliEditor {
                     val className = classAndMethod.substringBefore("->")
                     val methodName = classAndMethod.substringAfter("->")
 
-                    invocations.add(MethodInvocation(
-                        invokeType = pattern,
-                        className = className,
-                        methodName = methodName,
-                        lineNumber = index + 1,
-                        rawLine = trimmedLine
-                    ))
+                    invocations.add(
+                        MethodInvocation(
+                            invokeType = pattern,
+                            className = className,
+                            methodName = methodName,
+                            lineNumber = index + 1,
+                            rawLine = trimmedLine,
+                        ),
+                    )
                 }
             }
         }
@@ -254,19 +259,25 @@ class SmaliEditor {
     /**
      * Modify a string literal in the smali code.
      */
-    fun modifyStringLiteral(content: String, oldString: String, newString: String): String {
+    fun modifyStringLiteral(
+        content: String,
+        oldString: String,
+        newString: String,
+    ): String {
         // Escape special characters for smali
-        val escapedOld = oldString
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\t", "\\t")
+        val escapedOld =
+            oldString
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\t", "\\t")
 
-        val escapedNew = newString
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\t", "\\t")
+        val escapedNew =
+            newString
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\t", "\\t")
 
         return content.replace("\"$escapedOld\"", "\"$escapedNew\"")
     }
@@ -274,24 +285,30 @@ class SmaliEditor {
     /**
      * Add a new field to the class.
      */
-    fun addField(content: String, fieldName: String, fieldType: String, modifiers: String = "public"): String {
+    fun addField(
+        content: String,
+        fieldName: String,
+        fieldType: String,
+        modifiers: String = "public",
+    ): String {
         val fieldDirective = ".field $modifiers $fieldName:$fieldType\n"
 
         // Find a good position to insert (after existing fields or before methods)
         val methodIndex = content.indexOf(METHOD_DIRECTIVE)
         val fieldIndex = content.lastIndexOf(FIELD_DIRECTIVE)
 
-        val insertIndex = if (fieldIndex >= 0) {
-            // Insert after the last field
-            val nextLineIndex = content.indexOf('\n', fieldIndex)
-            nextLineIndex + 1
-        } else if (methodIndex >= 0) {
-            // Insert before first method
-            methodIndex
-        } else {
-            // Insert at the end
-            content.length
-        }
+        val insertIndex =
+            if (fieldIndex >= 0) {
+                // Insert after the last field
+                val nextLineIndex = content.indexOf('\n', fieldIndex)
+                nextLineIndex + 1
+            } else if (methodIndex >= 0) {
+                // Insert before first method
+                methodIndex
+            } else {
+                // Insert at the end
+                content.length
+            }
 
         return buildString {
             append(content.substring(0, insertIndex))
@@ -318,7 +335,7 @@ class SmaliEditor {
             methodInvocationCount = methodInvocations.size,
             classReferenceCount = classReferences.size,
             methods = smaliFile.methods.map { it.name },
-            fields = smaliFile.fields.map { it.name }
+            fields = smaliFile.fields.map { it.name },
         )
     }
 
@@ -356,27 +373,32 @@ class SmaliEditor {
         val name = nameWithType.substring(0, colonIndex)
         val type = nameWithType.substring(colonIndex + 1)
 
-        val modifiers = if (parts.size > 1) {
-            parts.dropLast(1).joinToString(" ")
-        } else {
-            ""
-        }
+        val modifiers =
+            if (parts.size > 1) {
+                parts.dropLast(1).joinToString(" ")
+            } else {
+                ""
+            }
 
-        val initialValue = if (nameWithType.contains("=")) {
-            nameWithType.substringAfter("=").trim()
-        } else {
-            null
-        }
+        val initialValue =
+            if (nameWithType.contains("=")) {
+                nameWithType.substringAfter("=").trim()
+            } else {
+                null
+            }
 
         return SmaliField(
             name = name,
             type = type,
             accessFlags = modifiers,
-            initialValue = initialValue
+            initialValue = initialValue,
         )
     }
 
-    private fun parseMethod(lines: List<String>, startIndex: Int): Pair<SmaliMethod, Int> {
+    private fun parseMethod(
+        lines: List<String>,
+        startIndex: Int,
+    ): Pair<SmaliMethod, Int> {
         val methodLine = lines[startIndex].trim()
         val methodDef = methodLine.removePrefix(METHOD_DIRECTIVE).trim()
 
@@ -384,18 +406,19 @@ class SmaliEditor {
         // format: [modifiers] name(Args)Ret
         val signatureMatch = """(\S+)\s+(\w+)\(([^)]*)\)(.+)""".toRegex().find(methodDef)
 
-        val (modifiers, name, params, returnType) = if (signatureMatch != null) {
-            val values = signatureMatch.destructured
-            Tuple4(values.component1(), values.component2(), values.component3(), values.component4())
-        } else {
-            // No modifiers
-            val nameStart = methodDef.indexOf("(")
-            val name = methodDef.substring(0, nameStart)
-            val paramsEnd = methodDef.indexOf(")")
-            val params = methodDef.substring(nameStart + 1, paramsEnd)
-            val returnType = methodDef.substring(paramsEnd + 1)
-            Tuple4("", name, params, returnType)
-        }
+        val (modifiers, name, params, returnType) =
+            if (signatureMatch != null) {
+                val values = signatureMatch.destructured
+                Tuple4(values.component1(), values.component2(), values.component3(), values.component4())
+            } else {
+                // No modifiers
+                val nameStart = methodDef.indexOf("(")
+                val name = methodDef.substring(0, nameStart)
+                val paramsEnd = methodDef.indexOf(")")
+                val params = methodDef.substring(nameStart + 1, paramsEnd)
+                val returnType = methodDef.substring(paramsEnd + 1)
+                Tuple4("", name, params, returnType)
+            }
 
         // Find method body
         val bodyBuilder = StringBuilder()
@@ -411,13 +434,16 @@ class SmaliEditor {
                 returnType = returnType,
                 parameters = parseParameterTypes(params),
                 accessFlags = modifiers,
-                body = bodyBuilder.toString()
+                body = bodyBuilder.toString(),
             ),
-            endIndex
+            endIndex,
         )
     }
 
-    private fun parseAnnotation(lines: List<String>, startIndex: Int): Pair<SmaliAnnotation, Int> {
+    private fun parseAnnotation(
+        lines: List<String>,
+        startIndex: Int,
+    ): Pair<SmaliAnnotation, Int> {
         val annotationLine = lines[startIndex].trim()
         val annotationType = annotationLine.removePrefix(ANNOTATION_DIRECTIVE).trim()
 
@@ -437,7 +463,7 @@ class SmaliEditor {
 
         return Pair(
             SmaliAnnotation(type = annotationType, values = values),
-            endIndex
+            endIndex,
         )
     }
 
@@ -481,7 +507,7 @@ class SmaliEditor {
 data class StringLiteral(
     val value: String,
     val lineNumber: Int,
-    val rawLine: String
+    val rawLine: String,
 )
 
 /**
@@ -492,7 +518,7 @@ data class MethodInvocation(
     val className: String,
     val methodName: String,
     val lineNumber: Int,
-    val rawLine: String
+    val rawLine: String,
 )
 
 /**
@@ -507,5 +533,5 @@ data class SmaliSummary(
     val methodInvocationCount: Int,
     val classReferenceCount: Int,
     val methods: List<String>,
-    val fields: List<String>
+    val fields: List<String>,
 )

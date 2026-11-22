@@ -22,14 +22,10 @@ package com.amaze.filemanager.apkeditor
 
 import android.content.Context
 import android.content.pm.PackageManager
-import android.graphics.drawable.Drawable
-import android.util.Xml
-import com.amaze.filemanager.R
-import com.amaze.filemanager.application.AppConfig
 import org.slf4j.LoggerFactory
-import org.xmlpull.v1.XmlPullParser
-import org.xmlpull.v1.XmlPullParserFactory
-import java.io.*
+import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
@@ -39,7 +35,6 @@ import java.util.zip.ZipOutputStream
  * Provides functionality similar to MT Manager for APK manipulation.
  */
 class ApkEditorEngine(private val context: Context) {
-
     private val LOG = LoggerFactory.getLogger(ApkEditorEngine::class.java)
 
     companion object {
@@ -54,7 +49,11 @@ class ApkEditorEngine(private val context: Context) {
 
     // Callback interface for progress updates
     interface ProgressCallback {
-        fun onProgressUpdate(progress: Int, message: String)
+        fun onProgressUpdate(
+            progress: Int,
+            message: String,
+        )
+
         fun onComplete(result: ApkOperationResult)
     }
 
@@ -62,7 +61,11 @@ class ApkEditorEngine(private val context: Context) {
      * Extract APK contents to a directory for editing.
      * This is a simplified extraction that doesn't fully decompile.
      */
-    fun extractApk(apkPath: String, outputDir: String, callback: ProgressCallback? = null): ApkOperationResult {
+    fun extractApk(
+        apkPath: String,
+        outputDir: String,
+        callback: ProgressCallback? = null,
+    ): ApkOperationResult {
         return try {
             callback?.onProgressUpdate(0, "Starting APK extraction...")
 
@@ -117,7 +120,11 @@ class ApkEditorEngine(private val context: Context) {
     /**
      * Repackage extracted APK contents back into a signed APK.
      */
-    fun repackageApk(projectDir: String, outputPath: String, callback: ProgressCallback? = null): ApkOperationResult {
+    fun repackageApk(
+        projectDir: String,
+        outputPath: String,
+        callback: ProgressCallback? = null,
+    ): ApkOperationResult {
         return try {
             callback?.onProgressUpdate(0, "Starting APK repackaging...")
 
@@ -178,7 +185,10 @@ class ApkEditorEngine(private val context: Context) {
 
             // Use PackageManager to get basic info
             val pm = context.packageManager
-            val packageInfo = pm.getPackageArchiveInfo(apkPath, PackageManager.GET_PERMISSIONS or PackageManager.GET_ACTIVITIES or PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_PROVIDERS)
+            val flags =
+                PackageManager.GET_PERMISSIONS or PackageManager.GET_ACTIVITIES or
+                    PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_PROVIDERS
+            val packageInfo = pm.getPackageArchiveInfo(apkPath, flags)
 
             packageInfo?.let { info ->
                 info.applicationInfo.sourceDir = apkPath
@@ -187,56 +197,61 @@ class ApkEditorEngine(private val context: Context) {
                 val permissions = info.requestedPermissions?.toList() ?: emptyList()
                 val dangerousPermissions = permissions.filter { isDangerousPermission(it) }
 
-                val activities = info.activities?.map { activityInfo ->
-                    ComponentInfo(
-                        name = activityInfo.name,
-                        packageName = info.packageName,
-                        isExported = activityInfo.exported,
-                        hasIntentFilters = activityInfo.targetSdkVersion > 0, // Simplified check
-                        enabled = activityInfo.enabled
-                    )
-                } ?: emptyList()
+                val activities =
+                    info.activities?.map { activityInfo ->
+                        ComponentInfo(
+                            name = activityInfo.name,
+                            packageName = info.packageName,
+                            isExported = activityInfo.exported,
+                            enabled = activityInfo.enabled,
+                        )
+                    } ?: emptyList()
 
-                val services = info.services?.map { serviceInfo ->
-                    ComponentInfo(
-                        name = serviceInfo.name,
-                        packageName = info.packageName,
-                        isExported = serviceInfo.exported,
-                        enabled = serviceInfo.enabled
-                    )
-                } ?: emptyList()
+                val services =
+                    info.services?.map { serviceInfo ->
+                        ComponentInfo(
+                            name = serviceInfo.name,
+                            packageName = info.packageName,
+                            isExported = serviceInfo.exported,
+                            enabled = serviceInfo.enabled,
+                        )
+                    } ?: emptyList()
 
-                val receivers = info.receivers?.map { receiverInfo ->
-                    ComponentInfo(
-                        name = receiverInfo.name,
-                        packageName = info.packageName,
-                        isExported = receiverInfo.exported,
-                        enabled = receiverInfo.enabled
-                    )
-                } ?: emptyList()
+                val receivers =
+                    info.receivers?.map { receiverInfo ->
+                        ComponentInfo(
+                            name = receiverInfo.name,
+                            packageName = info.packageName,
+                            isExported = receiverInfo.exported,
+                            enabled = receiverInfo.enabled,
+                        )
+                    } ?: emptyList()
 
-                val providers = info.providers?.map { providerInfo ->
-                    ComponentInfo(
-                        name = providerInfo.name,
-                        packageName = info.packageName,
-                        isExported = providerInfo.exported,
-                        permission = providerInfo.readPermission ?: providerInfo.writePermission,
-                        enabled = providerInfo.enabled
-                    )
-                } ?: emptyList()
+                val providers =
+                    info.providers?.map { providerInfo ->
+                        ComponentInfo(
+                            name = providerInfo.name,
+                            packageName = info.packageName,
+                            isExported = providerInfo.exported,
+                            permission = providerInfo.readPermission ?: providerInfo.writePermission,
+                            enabled = providerInfo.enabled,
+                        )
+                    } ?: emptyList()
 
-                val exportedComponents = (activities + services + receivers + providers)
-                    .filter { it.isExported }
+                val exportedComponents =
+                    (activities + services + receivers + providers)
+                        .filter { it.isExported }
 
                 ApkInfo(
                     packageName = info.packageName,
                     versionName = info.versionName ?: "",
-                    versionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                        info.longVersionCode
-                    } else {
-                        @Suppress("DEPRECATION")
-                        info.versionCode.toLong()
-                    },
+                    versionCode =
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                            info.longVersionCode
+                        } else {
+                            @Suppress("DEPRECATION")
+                            info.versionCode.toLong()
+                        },
                     minSdkVersion = info.applicationInfo.minSdkVersion,
                     targetSdkVersion = info.applicationInfo.targetSdkVersion,
                     permissions = permissions,
@@ -251,9 +266,7 @@ class ApkEditorEngine(private val context: Context) {
                     dangerousPermissions = dangerousPermissions,
                     filePath = apkPath,
                     fileSize = apkFile.length(),
-                    lastModified = apkFile.lastModified()
-                )
-            } ?: ApkInfo(filePath = apkPath, fileSize = apkFile.length(), lastModified = apkFile.lastModified()
+                    lastModified = apkFile.lastModified(),
                 )
             } ?: ApkInfo(filePath = apkPath, fileSize = apkFile.length(), lastModified = apkFile.lastModified())
         } catch (e: Exception) {
@@ -285,7 +298,10 @@ class ApkEditorEngine(private val context: Context) {
     /**
      * List files in extracted APK directory.
      */
-    fun listProjectFiles(projectDir: String, path: String = ""): List<ProjectFile> {
+    fun listProjectFiles(
+        projectDir: String,
+        path: String = "",
+    ): List<ProjectFile> {
         val result = mutableListOf<ProjectFile>()
         val baseDir = File(projectDir, path)
 
@@ -301,8 +317,8 @@ class ApkEditorEngine(private val context: Context) {
                     isDirectory = file.isDirectory,
                     size = if (file.isFile) file.length() else 0,
                     lastModified = file.lastModified(),
-                    type = getFileType(file)
-                )
+                    type = getFileType(file),
+                ),
             )
         }
 
@@ -312,7 +328,10 @@ class ApkEditorEngine(private val context: Context) {
     /**
      * Read file content from project.
      */
-    fun readFile(projectDir: String, filePath: String): String? {
+    fun readFile(
+        projectDir: String,
+        filePath: String,
+    ): String? {
         return try {
             val file = File(projectDir, filePath)
             if (file.exists() && file.isFile) {
@@ -329,7 +348,11 @@ class ApkEditorEngine(private val context: Context) {
     /**
      * Write content to file in project.
      */
-    fun writeFile(projectDir: String, filePath: String, content: String): Boolean {
+    fun writeFile(
+        projectDir: String,
+        filePath: String,
+        content: String,
+    ): Boolean {
         return try {
             val file = File(projectDir, filePath)
             file.parentFile?.mkdirs()
@@ -345,40 +368,45 @@ class ApkEditorEngine(private val context: Context) {
      * Check if a permission is considered dangerous.
      */
     private fun isDangerousPermission(permission: String): Boolean {
-        val dangerousPermissions = listOf(
-            "android.permission.READ_CONTACTS",
-            "android.permission.WRITE_CONTACTS",
-            "android.permission.READ_CALENDAR",
-            "android.permission.WRITE_CALENDAR",
-            "android.permission.READ_CALL_LOG",
-            "android.permission.WRITE_CALL_LOG",
-            "android.permission.READ_PHONE_STATE",
-            "android.permission.READ_PHONE_NUMBERS",
-            "android.permission.ANSWER_PHONE_CALLS",
-            "android.permission.CALL_PHONE",
-            "android.permission.PROCESS_OUTGOING_CALLS",
-            "android.permission.ACCESS_FINE_LOCATION",
-            "android.permission.ACCESS_COARSE_LOCATION",
-            "android.permission.ACCESS_BACKGROUND_LOCATION",
-            "android.permission.CAMERA",
-            "android.permission.RECORD_AUDIO",
-            "android.permission.READ_EXTERNAL_STORAGE",
-            "android.permission.WRITE_EXTERNAL_STORAGE",
-            "android.permission.MANAGE_EXTERNAL_STORAGE",
-            "android.permission.READ_SMS",
-            "android.permission.SEND_SMS",
-            "android.permission.RECEIVE_SMS",
-            "android.permission.READ_MMS",
-            "android.permission.BODY_SENSORS",
-            "android.permission.ACTIVITY_RECOGNITION"
-        )
+        val dangerousPermissions =
+            listOf(
+                "android.permission.READ_CONTACTS",
+                "android.permission.WRITE_CONTACTS",
+                "android.permission.READ_CALENDAR",
+                "android.permission.WRITE_CALENDAR",
+                "android.permission.READ_CALL_LOG",
+                "android.permission.WRITE_CALL_LOG",
+                "android.permission.READ_PHONE_STATE",
+                "android.permission.READ_PHONE_NUMBERS",
+                "android.permission.ANSWER_PHONE_CALLS",
+                "android.permission.CALL_PHONE",
+                "android.permission.PROCESS_OUTGOING_CALLS",
+                "android.permission.ACCESS_FINE_LOCATION",
+                "android.permission.ACCESS_COARSE_LOCATION",
+                "android.permission.ACCESS_BACKGROUND_LOCATION",
+                "android.permission.CAMERA",
+                "android.permission.RECORD_AUDIO",
+                "android.permission.READ_EXTERNAL_STORAGE",
+                "android.permission.WRITE_EXTERNAL_STORAGE",
+                "android.permission.MANAGE_EXTERNAL_STORAGE",
+                "android.permission.READ_SMS",
+                "android.permission.SEND_SMS",
+                "android.permission.RECEIVE_SMS",
+                "android.permission.READ_MMS",
+                "android.permission.BODY_SENSORS",
+                "android.permission.ACTIVITY_RECOGNITION",
+            )
         return permission in dangerousPermissions
     }
 
     /**
      * Helper function to add files to ZIP archive recursively.
      */
-    private fun addFileToZip(file: File, parentPath: String, zipOut: ZipOutputStream) {
+    private fun addFileToZip(
+        file: File,
+        parentPath: String,
+        zipOut: ZipOutputStream,
+    ) {
         val entryPath = if (parentPath.isEmpty()) file.name else "$parentPath/${file.name}"
 
         if (file.isDirectory) {
@@ -439,7 +467,7 @@ data class ProjectFile(
     val isDirectory: Boolean,
     val size: Long,
     val lastModified: Long,
-    val type: FileType
+    val type: FileType,
 )
 
 /**
@@ -456,5 +484,5 @@ enum class FileType {
     JSON,
     TEXT,
     NATIVE_LIB,
-    UNKNOWN
+    UNKNOWN,
 }

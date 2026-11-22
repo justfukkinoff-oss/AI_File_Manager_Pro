@@ -7,6 +7,7 @@
 # 3. Generates .cargo/config.toml with correct linker paths
 
 set -e
+cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 
 echo "🦀 Setting up Rust for Android development..."
 
@@ -35,16 +36,13 @@ find_android_sdk() {
     fi
 }
 
-# Function to find the latest NDK version
+# Function to find the NDK version selected by Gradle
 find_ndk_version() {
     local sdk_path="$1"
-    local ndk_dir="$sdk_path/ndk"
-    
-    if [ -d "$ndk_dir" ]; then
-        # Find the latest version (highest version number)
-        ls -1 "$ndk_dir" | sort -V | tail -n 1
-    else
-        echo ""
+    local version
+    version=$(sed -n 's/^ndk = "\([^"]*\)".*/\1/p' ../gradle/libs.versions.toml)
+    if [ -n "$version" ] && [ -d "$sdk_path/ndk/$version" ]; then
+        echo "$version"
     fi
 }
 
@@ -122,10 +120,11 @@ echo "🛠️  NDK toolchain path: $NDK_PATH"
 
 # Install Rust targets for Android
 echo "📦 Installing Rust targets for Android..."
-rustup target add aarch64-linux-android
-rustup target add armv7-linux-androideabi
-rustup target add i686-linux-android
-rustup target add x86_64-linux-android
+if [ "${1:-}" = "--arm64" ]; then
+    rustup target add aarch64-linux-android
+else
+    rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+fi
 
 # Create .cargo directory if it doesn't exist
 mkdir -p .cargo
@@ -177,6 +176,8 @@ echo "  - Config file: .cargo/config.toml"
 echo ""
 echo "🚀 You can now build for Android using:"
 echo "   cargo build --target aarch64-linux-android"
-echo "   cargo build --target armv7-linux-androideabi"
-echo "   cargo build --target i686-linux-android"
-echo "   cargo build --target x86_64-linux-android" 
+if [ "${1:-}" != "--arm64" ]; then
+    echo "   cargo build --target armv7-linux-androideabi"
+    echo "   cargo build --target i686-linux-android"
+    echo "   cargo build --target x86_64-linux-android"
+fi

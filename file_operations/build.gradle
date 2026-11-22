@@ -51,7 +51,8 @@ android {
 cargo {
     module = "./"
     libname = "rootoperations"
-    targets = ["arm", "arm64", "x86", "x86_64"]
+    targets = providers.gradleProperty("arm64Only").map { it.toBoolean() }.getOrElse(false) ?
+            ["arm64"] : ["arm", "arm64", "x86", "x86_64"]
     profile = "release"
     
     // Optional: Use cargo and rustc from the path

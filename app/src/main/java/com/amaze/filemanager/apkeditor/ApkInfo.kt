@@ -44,7 +44,7 @@ data class ApkInfo(
     val dangerousPermissions: List<String> = emptyList(),
     val filePath: String = "",
     val fileSize: Long = 0,
-    val lastModified: Long = 0
+    val lastModified: Long = 0,
 ) {
     /**
      * Returns true if this APK has any dangerous permissions
@@ -78,11 +78,12 @@ data class ApkInfo(
             concerns.add("Allows backup (potential data leakage)")
         }
 
-        val riskLevel = when {
-            concerns.isEmpty() -> RiskLevel.LOW
-            concerns.size <= 2 -> RiskLevel.MEDIUM
-            else -> RiskLevel.HIGH
-        }
+        val riskLevel =
+            when {
+                concerns.isEmpty() -> RiskLevel.LOW
+                concerns.size <= 2 -> RiskLevel.MEDIUM
+                else -> RiskLevel.HIGH
+            }
 
         return SecuritySummary(riskLevel, concerns)
     }
@@ -97,7 +98,7 @@ data class ComponentInfo(
     val isExported: Boolean = false,
     val hasIntentFilters: Boolean = false,
     val permission: String? = null,
-    val enabled: Boolean = true
+    val enabled: Boolean = true,
 ) {
     val fullName: String
         get() = if (name.startsWith(packageName)) name else "$packageName.$name"
@@ -110,7 +111,7 @@ enum class RiskLevel {
     LOW,
     MEDIUM,
     HIGH,
-    CRITICAL
+    CRITICAL,
 }
 
 /**
@@ -118,7 +119,7 @@ enum class RiskLevel {
  */
 data class SecuritySummary(
     val riskLevel: RiskLevel,
-    val concerns: List<String>
+    val concerns: List<String>,
 )
 
 /**
@@ -131,7 +132,7 @@ data class SmaliFile(
     val methods: List<SmaliMethod> = emptyList(),
     val fields: List<SmaliField> = emptyList(),
     val annotations: List<SmaliAnnotation> = emptyList(),
-    val content: String = ""
+    val content: String = "",
 )
 
 /**
@@ -142,7 +143,7 @@ data class SmaliMethod(
     val returnType: String,
     val parameters: List<String>,
     val accessFlags: String = "",
-    val body: String = ""
+    val body: String = "",
 )
 
 /**
@@ -152,7 +153,7 @@ data class SmaliField(
     val name: String,
     val type: String,
     val accessFlags: String = "",
-    val initialValue: String? = null
+    val initialValue: String? = null,
 )
 
 /**
@@ -160,7 +161,7 @@ data class SmaliField(
  */
 data class SmaliAnnotation(
     val type: String,
-    val values: Map<String, String> = emptyMap()
+    val values: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -177,7 +178,7 @@ data class ManifestInfo(
     val services: List<String>,
     val receivers: List<String>,
     val providers: List<String>,
-    val rawXml: String
+    val rawXml: String,
 )
 
 /**
@@ -185,6 +186,8 @@ data class ManifestInfo(
  */
 sealed class ApkOperationResult {
     data class Success(val message: String, val outputPath: String? = null) : ApkOperationResult()
+
     data class Error(val message: String, val exception: Throwable? = null) : ApkOperationResult()
+
     data class InProgress(val progress: Int, val message: String) : ApkOperationResult()
 }

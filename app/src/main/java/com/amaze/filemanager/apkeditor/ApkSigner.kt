@@ -21,282 +21,162 @@
 package com.amaze.filemanager.apkeditor
 
 import android.content.Context
-import com.android.apksigner.ApkSignerTool
+import com.android.apksig.ApkVerifier
+import org.bouncycastle.asn1.x500.X500Name
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
 import org.slf4j.LoggerFactory
-import java.io.*
+import java.io.File
+import java.math.BigInteger
+import java.security.KeyPairGenerator
 import java.security.KeyStore
-import java.security.cert.Certificate
-import java.security.cert.CertificateFactory
+import java.security.PrivateKey
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import java.util.Date
+import com.android.apksig.ApkSigner as ApkSigSigner
 
-/**
- * Handles APK signing operations using test keys or custom keystores.
- * Uses Android's apksigner library for v1/v2/v3 signing schemes.
- */
+/** Signs and verifies APKs through the Android apksig library, without invoking a CLI. */
 class ApkSigner(private val context: Context) {
-
-    private val LOG = LoggerFactory.getLogger(ApkSigner::class.java)
+    private val logger = LoggerFactory.getLogger(ApkSigner::class.java)
 
     companion object {
         const val KEYSTORE_PASSWORD = "android"
         const val KEY_ALIAS = "androiddebugkey"
         const val KEY_PASSWORD = "android"
-
-        // Test keystore for signing APKs (this is a public test key)
-        // In production, users should provide their own keystore
-        private const val TEST_KEYSTORE_NAME = "test.keystore"
+        private const val TEST_KEYSTORE_NAME = "apk-editor-test.p12"
+        private val testKeyLock = Any()
     }
 
-    /**
-     * Sign an APK with the default test key.
-     * Note: This is for development/testing purposes only.
-     * Production apps should use proper signing keys.
-     */
-    fun signApk(inputApkPath: String, outputApkPath: String): ApkOperationResult {
-        return try {
-            val inputFile = File(inputApkPath)
-            if (!inputFile.exists()) {
-                return ApkOperationResult.Error("Input APK not found: $inputApkPath")
-            }
-
-            // Ensure output directory exists
-            val outputFile = File(outputApkPath)
-            outputFile.parentFile?.mkdirs()
-
-            // Use test keystore for signing
-            val keystoreFile = getOrCreateTestKeystore()
-            if (!keystoreFile.exists()) {
-                return ApkOperationResult.Error("Failed to create test keystore")
-            }
-
-            // Sign using apksigner
-            val args = arrayOf(
-                "sign",
-                "--ks", keystoreFile.absolutePath,
-                "--ks-pass", "pass:$KEYSTORE_PASSWORD",
-                "--ks-key-alias", KEY_ALIAS,
-                "--key-pass", "pass:$KEY_PASSWORD",
-                "--out", outputApkPath,
-                inputApkPath
-            )
-
-            ApkSignerTool.main(args)
-
-            if (outputFile.exists()) {
-                ApkOperationResult.Success("APK signed successfully", outputApkPath)
-            } else {
-                ApkOperationResult.Error("APK signing failed - output file not created")
-            }
+    fun signApk(
+        inputApkPath: String,
+        outputApkPath: String,
+    ): ApkOperationResult =
+        try {
+            val keystore = getOrCreateTestKeystore()
+            signApkWithKeystore(inputApkPath, outputApkPath, keystore.path, KEYSTORE_PASSWORD, KEY_ALIAS, KEY_PASSWORD)
         } catch (e: Exception) {
-            LOG.error("Failed to sign APK", e)
-            ApkOperationResult.Error("Failed to sign APK: ${e.message}", e)
+            logger.error("Failed to load APK editor test key", e)
+            ApkOperationResult.Error("Failed to load APK editor test key: ${e.message}", e)
         }
-    }
 
-    /**
-     * Sign APK with custom keystore.
-     */
     fun signApkWithKeystore(
         inputApkPath: String,
         outputApkPath: String,
         keystorePath: String,
         keystorePassword: String,
         keyAlias: String,
-        keyPassword: String
+        keyPassword: String,
     ): ApkOperationResult {
         return try {
-            val keystoreFile = File(keystorePath)
-            if (!keystoreFile.exists()) {
-                return ApkOperationResult.Error("Keystore not found: $keystorePath")
-            }
+            val input = File(inputApkPath)
+            val output = File(outputApkPath)
+            val keystore = File(keystorePath)
+            require(input.isFile) { "Input APK not found: $inputApkPath" }
+            require(keystore.isFile) { "Keystore not found: $keystorePath" }
+            require(input.canonicalFile != output.canonicalFile) { "Input and output APKs must differ" }
 
-            val inputFile = File(inputApkPath)
-            if (!inputFile.exists()) {
-                return ApkOperationResult.Error("Input APK not found: $inputApkPath")
-            }
+            val store = loadKeystore(keystore, keystorePassword.toCharArray())
+            val key =
+                store.getKey(keyAlias, keyPassword.toCharArray()) as? PrivateKey
+                    ?: error("No private key found for alias $keyAlias")
+            val certificates =
+                store.getCertificateChain(keyAlias)?.map { it as X509Certificate }
+                    ?: error("No certificate chain found for alias $keyAlias")
+            val signer = ApkSigSigner.SignerConfig.Builder(keyAlias, key, certificates).build()
 
-            val outputFile = File(outputApkPath)
-            outputFile.parentFile?.mkdirs()
-
-            val args = arrayOf(
-                "sign",
-                "--ks", keystoreFile.absolutePath,
-                "--ks-pass", "pass:$keystorePassword",
-                "--ks-key-alias", keyAlias,
-                "--key-pass", "pass:$keyPassword",
-                "--out", outputApkPath,
-                inputApkPath
-            )
-
-            ApkSignerTool.main(args)
-
-            if (outputFile.exists()) {
-                ApkOperationResult.Success("APK signed successfully", outputApkPath)
-            } else {
-                ApkOperationResult.Error("APK signing failed")
-            }
+            output.parentFile?.mkdirs()
+            ApkSigSigner.Builder(listOf(signer))
+                .setInputApk(input)
+                .setOutputApk(output)
+                .build()
+                .sign()
+            ApkOperationResult.Success("APK signed successfully", outputApkPath)
         } catch (e: Exception) {
-            LOG.error("Failed to sign APK with custom keystore", e)
+            logger.error("Failed to sign APK", e)
             ApkOperationResult.Error("Failed to sign APK: ${e.message}", e)
         }
     }
 
-    /**
-     * Verify APK signature.
-     */
     fun verifyApk(apkPath: String): ApkVerificationResult {
         return try {
-            val apkFile = File(apkPath)
-            if (!apkFile.exists()) {
-                return ApkVerificationResult.Error("APK not found: $apkPath")
-            }
-
-            val outputStream = ByteArrayOutputStream()
-            val printStream = PrintStream(outputStream)
-
-            val originalOut = System.out
-            System.setOut(printStream)
-
-            try {
-                ApkSignerTool.main(arrayOf("verify", "-v", apkPath))
-            } finally {
-                System.setOut(originalOut)
-            }
-
-            val output = outputStream.toString()
-            val isSigned = output.contains("Verifies")
-
-            ApkVerificationResult.Success(
-                isSigned = isSigned,
-                signatureSchemes = extractSignatureSchemes(output),
-                details = output
-            )
+            val apk = File(apkPath)
+            require(apk.isFile) { "APK not found: $apkPath" }
+            val result = ApkVerifier.Builder(apk).build().verify()
+            val schemes =
+                buildList {
+                    if (result.isVerifiedUsingV1Scheme) add("v1 (JAR signing)")
+                    if (result.isVerifiedUsingV2Scheme) add("v2 (APK Signature Scheme v2)")
+                    if (result.isVerifiedUsingV3Scheme) add("v3 (APK Signature Scheme v3)")
+                    if (result.isVerifiedUsingV31Scheme) add("v3.1 (APK Signature Scheme v3.1)")
+                }
+            val details = (result.allErrors + result.warnings).joinToString("\n")
+            ApkVerificationResult.Success(result.isVerified, schemes, details)
         } catch (e: Exception) {
-            LOG.error("APK verification failed", e)
+            logger.error("APK verification failed", e)
             ApkVerificationResult.Error("Verification failed: ${e.message}")
         }
     }
 
-    /**
-     * Get or create test keystore for APK signing.
-     * Creates a simple test keystore if it doesn't exist.
-     */
-    private fun getOrCreateTestKeystore(): File {
-        val keystoreFile = File(context.cacheDir, TEST_KEYSTORE_NAME)
-
-        if (!keystoreFile.exists()) {
+    private fun loadKeystore(
+        file: File,
+        password: CharArray,
+    ): KeyStore {
+        var lastError: Exception? = null
+        for (type in listOf("PKCS12", "JKS", "BKS")) {
             try {
-                createTestKeystore(keystoreFile)
+                return KeyStore.getInstance(type).apply {
+                    file.inputStream().use { load(it, password) }
+                }
             } catch (e: Exception) {
-                LOG.error("Failed to create test keystore", e)
+                if (lastError == null) lastError = e
             }
         }
-
-        return keystoreFile
+        throw IllegalArgumentException("Could not open keystore; check its type and password", lastError)
     }
 
-    /**
-     * Create a simple test keystore programmatically.
-     */
-    private fun createTestKeystore(keystoreFile: File) {
-        try {
-            // Use keytool command to create keystore
-            val keytoolArgs = arrayOf(
-                "-genkey",
-                "-v",
-                "-keystore", keystoreFile.absolutePath,
-                "-alias", KEY_ALIAS,
-                "-keyalg", "RSA",
-                "-keysize", "2048",
-                "-validity", "10000",
-                "-storepass", KEYSTORE_PASSWORD,
-                "-keypass", KEY_PASSWORD,
-                "-dname", "CN=Test, OU=Test, O=Test, L=Test, ST=Test, C=US"
-            )
-
-            // Use sun.security.tools.keytool.Main if available
-            val keytoolClass = Class.forName("sun.security.tools.keytool.Main")
-            val mainMethod = keytoolClass.getMethod("main", Array<String>::class.java)
-            mainMethod.invoke(null, keytoolArgs)
-
-            LOG.info("Test keystore created at: ${keystoreFile.absolutePath}")
-        } catch (e: Exception) {
-            LOG.warn("Could not create keystore via keytool, using embedded test key", e)
-            // Create a minimal keystore with embedded test certificate
-            createEmbeddedTestKeystore(keystoreFile)
-        }
-    }
-
-    /**
-     * Create an embedded test keystore as fallback.
-     */
-    private fun createEmbeddedTestKeystore(keystoreFile: File) {
-        // This creates a basic test keystore with a self-signed certificate
-        // For actual production use, users must provide their own keystore
-        try {
-            val keyStore = KeyStore.getInstance("JKS")
-            keyStore.load(null, null)
-
-            // Generate a simple RSA key pair
-            val keyPairGenerator = java.security.KeyPairGenerator.getInstance("RSA")
-            keyPairGenerator.initialize(2048)
-            val keyPair = keyPairGenerator.generateKeyPair()
-
-            // Create a self-signed certificate
-            val dn = "CN=Test, OU=Test, O=Test, L=Test, ST=Test, C=US"
-            val cert = createSelfSignedCertificate(keyPair, dn)
-
-            // Store in keystore
-            keyStore.setKeyEntry(
-                KEY_ALIAS,
-                keyPair.private,
-                KEY_PASSWORD.toCharArray(),
-                arrayOf<Certificate>(cert)
-            )
-
-            // Save keystore
-            FileOutputStream(keystoreFile).use { fos ->
-                keyStore.store(fos, KEYSTORE_PASSWORD.toCharArray())
+    private fun getOrCreateTestKeystore(): File =
+        synchronized(testKeyLock) {
+            val file = File(context.filesDir, TEST_KEYSTORE_NAME)
+            if (!file.exists()) {
+                val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+                val name = X500Name("CN=APK Editor Test Key")
+                val now = System.currentTimeMillis()
+                val certificate =
+                    JcaX509CertificateConverter().getCertificate(
+                        JcaX509v3CertificateBuilder(
+                            name,
+                            BigInteger(128, SecureRandom()).add(BigInteger.ONE),
+                            Date(now - 60_000),
+                            Date(now + 3650L * 24 * 60 * 60 * 1000),
+                            name,
+                            keyPair.public,
+                        ).build(JcaContentSignerBuilder("SHA256withRSA").build(keyPair.private)),
+                    )
+                val password = KEYSTORE_PASSWORD.toCharArray()
+                val store =
+                    KeyStore.getInstance("PKCS12").apply {
+                        load(null, null)
+                        setKeyEntry(KEY_ALIAS, keyPair.private, password, arrayOf(certificate))
+                    }
+                val temporary = File.createTempFile("apk-editor-test", ".p12", file.parentFile)
+                try {
+                    temporary.outputStream().use { store.store(it, password) }
+                    check(temporary.renameTo(file)) { "Could not save APK editor test key" }
+                } finally {
+                    temporary.delete()
+                }
             }
-
-            LOG.info("Embedded test keystore created at: ${keystoreFile.absolutePath}")
-        } catch (e: Exception) {
-            LOG.error("Failed to create embedded test keystore", e)
+            file
         }
-    }
-
-    /**
-     * Create a self-signed certificate.
-     */
-    private fun createSelfSignedCertificate(keyPair: java.security.KeyPair, dn: String): Certificate {
-        // Use BouncyCastle if available, otherwise use basic approach
-        // This is a simplified implementation
-        val certFactory = CertificateFactory.getInstance("X.509")
-        // For a complete implementation, we'd need to generate a proper X.509 certificate
-        // For now, return a minimal implementation that works with apksigner
-        throw UnsupportedOperationException("Use external keystore for production signing")
-    }
-
-    /**
-     * Extract signature schemes from verification output.
-     */
-    private fun extractSignatureSchemes(output: String): List<String> {
-        val schemes = mutableListOf<String>()
-        if (output.contains("v1 scheme")) schemes.add("v1 (JAR signing)")
-        if (output.contains("v2 scheme")) schemes.add("v2 (APK Signature Scheme v2)")
-        if (output.contains("v3 scheme")) schemes.add("v3 (APK Signature Scheme v3)")
-        if (output.contains("v4 scheme")) schemes.add("v4 (APK Signature Scheme v4)")
-        return schemes
-    }
 }
 
-/**
- * Result of APK verification.
- */
 sealed class ApkVerificationResult {
     data class Success(
         val isSigned: Boolean,
         val signatureSchemes: List<String>,
-        val details: String
+        val details: String,
     ) : ApkVerificationResult()
 
     data class Error(val message: String) : ApkVerificationResult()
